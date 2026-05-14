@@ -1,0 +1,32 @@
+# Generated media outputs
+*.mp4
+*.m4v
+
+# Common source media / scratch files that should not usually be committed
+*.avi
+*.mov
+*.mkv
+*.wmv
+*.flv
+*.webm
+*.mpeg
+*.mpg
+*.ts
+*.mts
+*.m2ts
+
+# Temporary and partial conversion outputs
+*.part
+*.tmp
+*.temp
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+
+# Editor swap / backup files
+*~
+*.swp
+*.swo
