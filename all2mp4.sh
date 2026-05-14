@@ -8,6 +8,10 @@ clear_metadata=false
 metadata_args=()
 positional_args=()
 
+fps=
+vsync_mode=
+speed=
+
 usage() {
     cat <<EOF
 Usage: $progname [OPTIONS] INPUT [OUTPUT]
@@ -27,13 +31,18 @@ Options:
   --comment TEXT           Set comment metadata
   --preserve-metadata      Preserve input global metadata before applying edits
   --clear-metadata         Clear input global metadata before applying edits
+  --fps N                  Convert output video to frame rate N
+  --cfr                    Force constant frame rate output
+  --vfr                    Force variable frame rate output
+  --speed X                Adjust playback speed by factor X
   -h, --help               Show this help text
 
 Examples:
   $progname old-video.avi
   $progname input.mov output.mp4
   $progname --title "New Title" input.avi
-  $progname --clear-metadata --comment "recoded" input.wmv output.mp4
+  $progname --fps 30 --cfr input.mov
+  $progname --speed 1.25 input.wmv output.mp4
 EOF
 }
 
@@ -84,6 +93,23 @@ require_option_value() {
         error "$option requires a value"
         exit 2
     fi
+}
+
+validate_positive_number() {
+    value=$1
+    name=$2
+
+    case "$value" in
+        ''|*[!0-9.]*|*.*.*)
+            error "$name must be a positive number"
+            exit 2
+            ;;
+    esac
+
+    awk "BEGIN { exit !($value > 0) }" || {
+        error "$name must be greater than zero"
+        exit 2
+    }
 }
 
 parse_args() {
@@ -155,6 +181,32 @@ parse_args() {
                 clear_metadata=true
                 shift
                 ;;
+            --fps)
+                require_option_value "$1" "${2-}"
+                fps=$2
+                shift 2
+                ;;
+            --fps=*)
+                fps=${1#--fps=}
+                shift
+                ;;
+            --cfr)
+                vsync_mode=cfr
+                shift
+                ;;
+            --vfr)
+                vsync_mode=vfr
+                shift
+                ;;
+            --speed)
+                require_option_value "$1" "${2-}"
+                speed=$2
+                shift 2
+                ;;
+            --speed=*)
+                speed=${1#--speed=}
+                shift
+                ;;
             --)
                 shift
                 while [ "$#" -gt 0 ]; do
@@ -177,6 +229,14 @@ parse_args() {
     if [ "$preserve_metadata" = true ] && [ "$clear_metadata" = true ]; then
         error "--preserve-metadata and --clear-metadata cannot be used together"
         exit 2
+    fi
+
+    if [ -n "$fps" ]; then
+        validate_positive_number "$fps" "fps"
+    fi
+
+    if [ -n "$speed" ]; then
+        validate_positive_number "$speed" "speed"
     fi
 }
 
@@ -237,6 +297,27 @@ video_encoder_args() {
     esac
 }
 
+build_video_filters() {
+    filters=( "scale=trunc(iw/2)*2:trunc(ih/2)*2" )
+
+    if [ -n "$fps" ]; then
+        filters+=( "fps=$fps" )
+    fi
+
+    if [ -n "$speed" ]; then
+        filters+=( "setpts=PTS/$speed" )
+    fi
+
+    IFS=,
+    printf '%s\n' "${filters[*]}"
+}
+
+build_audio_filters() {
+    if [ -n "$speed" ]; then
+        printf '%s\n' "atempo=$speed"
+    fi
+}
+
 run_ffmpeg() {
     encoder=$1
     input=$2
@@ -256,26 +337,43 @@ EOF
         metadata_mode_args=( -map_metadata 0 )
     fi
 
-    ffmpeg \
-        -hide_banner \
-        -loglevel error \
-        -y \
-        -fflags +genpts \
-        -i "$input" \
-        -map 0:v:0 \
-        -map 0:a? \
-        -dn \
-        -sn \
-        "${metadata_mode_args[@]}" \
-        "${metadata_args[@]}" \
-        "${encoder_args[@]}" \
-        -pix_fmt yuv420p \
-        -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" \
-        -movflags +faststart \
-        -c:a aac \
-        -b:a 192k \
-        -f mp4 \
+    ffmpeg_args=(
+        -hide_banner
+        -loglevel error
+        -y
+        -fflags +genpts
+        -i "$input"
+        -map 0:v:0
+        -map 0:a?
+        -dn
+        -sn
+    )
+
+    if [ -n "$vsync_mode" ]; then
+        ffmpeg_args+=( -vsync "$vsync_mode" )
+    fi
+
+    ffmpeg_args+=(
+        "${metadata_mode_args[@]}"
+        "${metadata_args[@]}"
+        "${encoder_args[@]}"
+        -pix_fmt yuv420p
+        -vf "$(build_video_filters)"
+    )
+
+    if [ -n "$speed" ]; then
+        ffmpeg_args+=( -af "$(build_audio_filters)" )
+    fi
+
+    ffmpeg_args+=(
+        -movflags +faststart
+        -c:a aac
+        -b:a 192k
+        -f mp4
         "$tmp_output"
+    )
+
+    ffmpeg "${ffmpeg_args[@]}"
 }
 
 parse_args "$@"
