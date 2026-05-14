@@ -1,155 +1,177 @@
 # all2mp4
 
-`all2mp4` is a small shell utility for converting arbitrary video files into standardized H.264/AAC MP4 output.
+`all2mp4.sh` is a small shell script that converts many kinds of video files into standardized MP4 output using `ffmpeg`.
 
-The goal is simple: take old, unusual, or inconsistent video files and produce an `.mp4` that is much more likely to play reliably across common devices, browsers, and media players.
+The goal is practical normalization:
+- MP4 container,
+- H.264 video,
+- AAC audio when audio is present,
+- broadly compatible pixel format and playback behavior.
+
+This project is intentionally simple. It is meant to be easy to read, easy to run, and useful on real media files, including older formats, as long as `ffmpeg` can decode them.
 
 ## Features
 
-- Converts many input video formats into `.mp4`
-- Standardizes video to **H.264**
-- Standardizes audio to **AAC** when audio is present
-- Uses `yuv420p` for broad compatibility
-- Enables `faststart` for better playback and streaming behavior
-- Adjusts odd dimensions when needed for H.264 compatibility
-- Keeps the project small and shell-script-friendly
+- Converts a wide range of input containers to MP4
+- Encodes video as H.264
+- Encodes audio as AAC when audio exists
+- Automatically detects a usable H.264 encoder from the local `ffmpeg` environment
+- Tolerates missing audio streams
+- Ignores subtitle and data streams
+- Scales output dimensions to even values for encoder compatibility
+- Uses a temporary output file and only moves the final file into place after success
+- Refuses to overwrite an existing output file
+- Cleans up partial output on failure or interruption
 
 ## Requirements
 
-- POSIX-like shell
+- A POSIX-like shell environment
 - `ffmpeg` installed and available on `PATH`
 
-Optional:
-- `ffprobe` for diagnostics or future enhancements
+The script depends on the capabilities of the local `ffmpeg` build.
 
-## Installation
+It currently looks for a supported H.264 encoder in this order:
 
-Clone the repository:
+1. `libx264`
+2. `libopenh264`
+3. `h264_nvenc`
+4. `h264_qsv`
+5. `h264_amf`
+6. `h264_mf`
+7. `h264_d3d12va`
+8. `h264_vulkan`
+9. `h264_videotoolbox`
 
-```sh
-git clone https://github.com/topquark22/all2mp4.git
-cd all2mp4
-```
+It also requires an AAC encoder to be available in `ffmpeg`.
 
-Make the script executable:
-
-```sh
-chmod +x all2mp4
-```
-
-Run it directly:
-
-```sh
-./all2mp4 input.avi
-```
+Because `ffmpeg` builds vary by platform and packaging, the exact encoder used may differ from one machine to another.
 
 ## Usage
 
 ```sh
-./all2mp4 INPUT [OUTPUT]
+./all2mp4.sh INPUT [OUTPUT]
 ```
 
 Examples:
 
 ```sh
-./all2mp4 old-video.avi
-./all2mp4 input.mov output.mp4
-./all2mp4 weird_1997_capture.mkv normalized.mp4
+./all2mp4.sh old-video.avi
+./all2mp4.sh archive.flv
+./all2mp4.sh input.mov output.mp4
 ```
 
-If `OUTPUT` is omitted, the tool should derive the output filename from the input name and replace the extension with `.mp4`.
+If `OUTPUT` is omitted, the script derives it from the input filename by replacing the extension with `.mp4`.
 
-## Output Standard
+Examples:
 
-The tool is intended to produce output with:
+- `movie.avi` -> `movie.mp4`
+- `clip.flv` -> `clip.mp4`
+- `recording` -> `recording.mp4`
 
-- **Container:** MP4
-- **Video codec:** H.264
-- **Audio codec:** AAC, if audio exists
-- **Pixel format:** `yuv420p`
-- **Faststart:** enabled
+## What the Script Does
 
-A representative `ffmpeg` command looks like this:
+The script runs `ffmpeg` with behavior intended to be safe and practical:
 
-```sh
-ffmpeg -fflags +genpts -i input_video.ext \
-  -map 0:v:0 -map 0:a? \
-  -dn -sn \
-  -c:v libx264 -preset medium -crf 23 \
-  -pix_fmt yuv420p \
-  -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" \
-  -movflags +faststart \
-  -c:a aac -b:a 192k \
-  output.mp4
-```
+- uses the first video stream,
+- uses the first audio stream if present,
+- tolerates inputs with no audio,
+- drops subtitle and data streams,
+- generates timestamps when needed,
+- writes to a temporary `.mp4` path first,
+- renames the completed file into place only after success.
 
-## Behavior Notes
+On successful conversion, it prints:
+- the selected video encoder,
+- the created output path.
 
-- The first video stream is used.
-- The first audio stream is included when present.
-- Subtitle and data streams are omitted in the initial version.
-- Video is re-encoded to H.264.
-- Audio is re-encoded to AAC when present.
-- Dimensions may be adjusted to even values to satisfy encoder requirements.
-
-## Errors
-
-The script should report clear errors for cases such as:
-
-- missing input argument,
-- input file not found,
-- input file unreadable,
-- `ffmpeg` not installed,
-- decode failure,
-- output write failure.
-
-It should return:
-- `0` on success,
-- non-zero on failure.
-
-## Project Structure
-
-This repository intentionally uses a flat layout:
+## Example Output
 
 ```text
-all2mp4/
-├── README.md
-├── REQUIREMENTS.md
-├── all2mp4
-├── smoke-test.sh
-├── .gitignore
-└── LICENSE
+all2mp4.sh: using video encoder: libopenh264
+created: Smile.mp4
 ```
 
-## Scope
+The exact encoder shown will depend on the local `ffmpeg` installation.
 
-Initial scope:
+## Supported Inputs
 
-- single-file conversion,
-- optional explicit output filename,
-- compatibility-focused defaults,
-- minimal shell-script implementation,
-- basic documentation.
+This tool is intended for practical use with many common and legacy containers, including examples such as:
 
-Possible future enhancements:
+- `.flv`
+- `.avi`
+- `.mov`
+- `.mkv`
+- `.mp4`
+- and other formats decodable by `ffmpeg`
 
-- batch conversion,
-- recursive processing,
-- configurable quality settings,
-- overwrite flags,
-- metadata options,
-- subtitle handling,
-- more complete tests.
+Support ultimately depends on whether the local `ffmpeg` build can decode the input file.
 
-## Non-Goals
+## What This Tool Does Not Try to Do
 
-`all2mp4` is not intended to:
+This script currently does not try to:
 
-- preserve original codecs,
-- perform lossless archival transcoding,
-- serve as a full media library manager,
-- provide a GUI.
+- preserve subtitle streams,
+- preserve data streams,
+- preserve all metadata,
+- preserve chapters,
+- expose advanced quality controls,
+- batch-convert directories,
+- overwrite existing outputs automatically,
+- guarantee identical output across different systems.
+
+It is a simple normalization tool, not a full transcoding framework.
+
+## Testing
+
+This repository includes:
+
+- `TEST_PLAN.md` for the manual test strategy and test matrix
+- `smoke-test.sh` for basic command-line smoke testing of failure paths
+
+To run the smoke tests:
+
+```sh
+chmod +x smoke-test.sh
+./smoke-test.sh
+```
+
+For media-based validation, see `TEST_PLAN.md`.
+
+## Notes on Portability
+
+`ffmpeg` support differs across environments.
+
+For example, one machine may provide:
+- `libx264`
+
+while another may provide:
+- `libopenh264`
+- `h264_qsv`
+- `h264_nvenc`
+- or other platform-specific H.264 encoders
+
+This project handles that by detecting supported H.264 encoders at runtime and choosing one automatically.
+
+Even so, hardware-backed encoders may still fail at runtime if drivers or system support are incomplete.
+
+## Exit Behavior
+
+- exits with status `0` on success
+- exits non-zero on failure
+
+Errors are reported with human-readable messages on standard error.
+
+## Roadmap Ideas
+
+Possible future improvements include:
+
+- configurable overwrite mode
+- configurable quality settings
+- batch conversion
+- recursive directory handling
+- post-conversion verification with `ffprobe`
+- more automated tests with sample fixtures
 
 ## License
 
-TBD
+Add
