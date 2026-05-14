@@ -23,6 +23,10 @@ error() {
     printf '%s: %s\n' "$progname" "$*" >&2
 }
 
+info() {
+    printf '%s: %s\n' "$progname" "$*"
+}
+
 have_command() {
     command -v "$1" >/dev/null 2>&1
 }
@@ -33,6 +37,169 @@ derive_output_path() {
     case "$input" in
         *.*) printf '%s\n' "${input%.*}.mp4" ;;
         *)   printf '%s\n' "${input}.mp4" ;;
+    esac
+}
+
+have_encoder() {
+    encoder=$1
+    ffmpeg -hide_banner -encoders 2>/dev/null | awk '{print $2}' | grep -Fx "$encoder" >/dev/null 2>&1
+}
+
+select_video_encoder() {
+    for encoder in \
+        libx264 \
+        libopenh264 \
+        h264_videotoolbox \
+        h264_nvenc \
+        h264_qsv \
+        h264_amf
+    do
+        if have_encoder "$encoder"; then
+            printf '%s\n' "$encoder"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+run_ffmpeg() {
+    encoder=$1
+    input=$2
+    tmp_output=$3
+
+    case "$encoder" in
+        libx264)
+            ffmpeg \
+                -hide_banner \
+                -loglevel error \
+                -y \
+                -fflags +genpts \
+                -i "$input" \
+                -map 0:v:0 \
+                -map 0:a? \
+                -dn \
+                -sn \
+                -c:v libx264 \
+                -preset medium \
+                -crf 23 \
+                -pix_fmt yuv420p \
+                -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" \
+                -movflags +faststart \
+                -c:a aac \
+                -b:a 192k \
+                -f mp4 \
+                "$tmp_output"
+            ;;
+        libopenh264)
+            ffmpeg \
+                -hide_banner \
+                -loglevel error \
+                -y \
+                -fflags +genpts \
+                -i "$input" \
+                -map 0:v:0 \
+                -map 0:a? \
+                -dn \
+                -sn \
+                -c:v libopenh264 \
+                -b:v 5000k \
+                -pix_fmt yuv420p \
+                -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" \
+                -movflags +faststart \
+                -c:a aac \
+                -b:a 192k \
+                -f mp4 \
+                "$tmp_output"
+            ;;
+        h264_videotoolbox)
+            ffmpeg \
+                -hide_banner \
+                -loglevel error \
+                -y \
+                -fflags +genpts \
+                -i "$input" \
+                -map 0:v:0 \
+                -map 0:a? \
+                -dn \
+                -sn \
+                -c:v h264_videotoolbox \
+                -b:v 5000k \
+                -pix_fmt yuv420p \
+                -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" \
+                -movflags +faststart \
+                -c:a aac \
+                -b:a 192k \
+                -f mp4 \
+                "$tmp_output"
+            ;;
+        h264_nvenc)
+            ffmpeg \
+                -hide_banner \
+                -loglevel error \
+                -y \
+                -fflags +genpts \
+                -i "$input" \
+                -map 0:v:0 \
+                -map 0:a? \
+                -dn \
+                -sn \
+                -c:v h264_nvenc \
+                -b:v 5000k \
+                -pix_fmt yuv420p \
+                -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" \
+                -movflags +faststart \
+                -c:a aac \
+                -b:a 192k \
+                -f mp4 \
+                "$tmp_output"
+            ;;
+        h264_qsv)
+            ffmpeg \
+                -hide_banner \
+                -loglevel error \
+                -y \
+                -fflags +genpts \
+                -i "$input" \
+                -map 0:v:0 \
+                -map 0:a? \
+                -dn \
+                -sn \
+                -c:v h264_qsv \
+                -b:v 5000k \
+                -pix_fmt yuv420p \
+                -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" \
+                -movflags +faststart \
+                -c:a aac \
+                -b:a 192k \
+                -f mp4 \
+                "$tmp_output"
+            ;;
+        h264_amf)
+            ffmpeg \
+                -hide_banner \
+                -loglevel error \
+                -y \
+                -fflags +genpts \
+                -i "$input" \
+                -map 0:v:0 \
+                -map 0:a? \
+                -dn \
+                -sn \
+                -c:v h264_amf \
+                -b:v 5000k \
+                -pix_fmt yuv420p \
+                -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" \
+                -movflags +faststart \
+                -c:a aac \
+                -b:a 192k \
+                -f mp4 \
+                "$tmp_output"
+            ;;
+        *)
+            error "unsupported encoder selection: $encoder"
+            return 1
+            ;;
     esac
 }
 
@@ -74,7 +241,18 @@ if [ -e "$output" ]; then
     exit 1
 fi
 
-tmp_output="${output}.part"
+case "$output" in
+    *.mp4) tmp_output="${output%.mp4}.part.mp4" ;;
+    *)     tmp_output="${output}.part.mp4" ;;
+esac
+
+if ! video_encoder=$(select_video_encoder); then
+    error "no supported H.264 encoder found in ffmpeg"
+    error "tried: libx264, libopenh264, h264_videotoolbox, h264_nvenc, h264_qsv, h264_amf"
+    exit 1
+fi
+
+info "using video encoder: $video_encoder"
 
 cleanup() {
     if [ -e "$tmp_output" ]; then
@@ -84,26 +262,7 @@ cleanup() {
 
 trap cleanup EXIT INT TERM HUP
 
-if ! ffmpeg \
-    -hide_banner \
-    -loglevel error \
-    -y \
-    -fflags +genpts \
-    -i "$input" \
-    -map 0:v:0 \
-    -map 0:a? \
-    -dn \
-    -sn \
-    -c:v libx264 \
-    -preset medium \
-    -crf 23 \
-    -pix_fmt yuv420p \
-    -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" \
-    -movflags +faststart \
-    -c:a aac \
-    -b:a 192k \
-    "$tmp_output"
-then
+if ! run_ffmpeg "$video_encoder" "$input" "$tmp_output"; then
     error "conversion failed"
     exit 1
 fi
