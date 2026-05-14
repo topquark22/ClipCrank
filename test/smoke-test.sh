@@ -3,7 +3,8 @@ set -eu
 
 progname="${0##*/}"
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-target_script="$script_dir/all2mp4.sh"
+repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
+target_script="$repo_root/all2mp4.sh"
 
 pass_count=0
 fail_count=0
