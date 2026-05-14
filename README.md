@@ -178,6 +178,3 @@ Possible future improvements include:
 - post-conversion verification with `ffprobe`
 - more automated tests with sample fixtures
 
-## License
-
-Add
