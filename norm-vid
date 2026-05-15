@@ -51,7 +51,7 @@ error() {
 }
 
 info() {
-    printf '%s: %s\n' "$*"
+    printf '%s: %s\n' "$progname" "$*"
 }
 
 have_command() {
