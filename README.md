@@ -10,6 +10,12 @@ The goal is practical normalization:
 
 This project is intentionally simple. It is meant to be easy to read, easy to run, and useful on real media files, including older formats, as long as `ffmpeg` can decode them.
 
+`all2mp4.sh` is not intended to replace `ffmpeg`.
+
+Instead, it acts as a practical simplification layer for common transcoding tasks. The script aims to expose a small number of useful and understandable options while relying on `ffmpeg` to perform the actual media processing.
+
+The design goal is convenience without unnecessary complexity.
+
 ## Features
 
 - Converts a wide range of input containers to MP4
@@ -172,6 +178,3 @@ Possible future improvements include:
 - post-conversion verification with `ffprobe`
 - more automated tests with sample fixtures
 
-## License
-
-Add

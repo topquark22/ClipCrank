@@ -8,6 +8,9 @@ clear_metadata=false
 metadata_args=()
 positional_args=()
 
+fps=
+cfr=false
+
 usage() {
     cat <<EOF
 Usage: $progname [OPTIONS] INPUT [OUTPUT]
@@ -27,13 +30,16 @@ Options:
   --comment TEXT           Set comment metadata
   --preserve-metadata      Preserve input global metadata before applying edits
   --clear-metadata         Clear input global metadata before applying edits
+  --fps N                  Convert output video to frame rate N
+  --cfr                    Force constant frame rate output
   -h, --help               Show this help text
 
 Examples:
   $progname old-video.avi
   $progname input.mov output.mp4
   $progname --title "New Title" input.avi
-  $progname --clear-metadata --comment "recoded" input.wmv output.mp4
+  $progname --fps 30 input.mov
+  $progname --fps 30 --cfr input.mov
 EOF
 }
 
@@ -111,6 +117,23 @@ set_metadata_option() {
     esac
 }
 
+validate_positive_number() {
+    value=$1
+    name=$2
+
+    case "$value" in
+        ''|*[!0-9.]*|*.*.*)
+            error "$name must be a positive number"
+            exit 2
+            ;;
+    esac
+
+    awk "BEGIN { exit !($value > 0) }" || {
+        error "$name must be greater than zero"
+        exit 2
+    }
+}
+
 parse_args() {
     while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -139,6 +162,15 @@ parse_args() {
                 clear_metadata=true
                 shift
                 ;;
+            --fps)
+                require_option_value "$1" "$#"
+                fps=$2
+                shift 2
+                ;;
+            --cfr)
+                cfr=true
+                shift
+                ;;
             --)
                 shift
                 while [ "$#" -gt 0 ]; do
@@ -161,6 +193,10 @@ parse_args() {
     if [ "$preserve_metadata" = true ] && [ "$clear_metadata" = true ]; then
         error "--preserve-metadata and --clear-metadata cannot be used together"
         exit 2
+    fi
+
+    if [ -n "$fps" ]; then
+        validate_positive_number "$fps" "fps"
     fi
 }
 
@@ -221,6 +257,17 @@ video_encoder_args() {
     esac
 }
 
+build_video_filters() {
+    filters=( "scale=trunc(iw/2)*2:trunc(ih/2)*2" )
+
+    if [ -n "$fps" ]; then
+        filters+=( "fps=$fps" )
+    fi
+
+    IFS=,
+    printf '%s\n' "${filters[*]}"
+}
+
 run_ffmpeg() {
     encoder=$1
     input=$2
@@ -240,6 +287,11 @@ EOF
         metadata_mode_args=( -map_metadata 0 )
     fi
 
+    cfr_args=()
+    if [ "$cfr" = true ]; then
+        cfr_args=( -vsync cfr )
+    fi
+
     ffmpeg \
         -hide_banner \
         -loglevel error \
@@ -250,11 +302,12 @@ EOF
         -map 0:a? \
         -dn \
         -sn \
+        "${cfr_args[@]}" \
         "${metadata_mode_args[@]}" \
         "${metadata_args[@]}" \
         "${encoder_args[@]}" \
         -pix_fmt yuv420p \
-        -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" \
+        -vf "$(build_video_filters)" \
         -movflags +faststart \
         -c:a aac \
         -b:a 192k \
