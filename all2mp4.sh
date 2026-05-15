@@ -11,6 +11,7 @@ positional_args=()
 
 fps=
 cfr=false
+trim_seconds=
 
 usage() {
     cat <<EOF
@@ -32,6 +33,7 @@ Options:
   --preserve-metadata      Preserve input global metadata before applying edits
   --clear-metadata         Clear input global metadata before applying edits
   --rewrite                Explicitly rewrite media as a fresh MP4 encode
+  --trim-seconds N         Trim N seconds from the start during conversion
   --fps N                  Convert output video to frame rate N
   --cfr                    Force constant frame rate output
   -h, --help               Show this help text
@@ -41,6 +43,7 @@ Examples:
   $progname input.mov output.mp4
   $progname --title "New Title" input.avi
   $progname --rewrite input.mp4 rewritten.mp4
+  $progname --trim-seconds 0.04 input.mp4 output.mp4
   $progname --fps 30 input.mov
   $progname --fps 30 --cfr input.mov
 EOF
@@ -120,6 +123,23 @@ set_metadata_option() {
     esac
 }
 
+validate_nonnegative_number() {
+    value=$1
+    name=$2
+
+    case "$value" in
+        ''|*[!0-9.]*|*.*.*)
+            error "$name must be a non-negative number"
+            exit 2
+            ;;
+    esac
+
+    awk "BEGIN { exit !($value >= 0) }" || {
+        error "$name must be greater than or equal to zero"
+        exit 2
+    }
+}
+
 validate_positive_number() {
     value=$1
     name=$2
@@ -169,6 +189,11 @@ parse_args() {
                 rewrite=true
                 shift
                 ;;
+            --trim-seconds)
+                require_option_value "$1" "$#"
+                trim_seconds=$2
+                shift 2
+                ;;
             --fps)
                 require_option_value "$1" "$#"
                 fps=$2
@@ -204,6 +229,10 @@ parse_args() {
 
     if [ -n "$fps" ]; then
         validate_positive_number "$fps" "fps"
+    fi
+
+    if [ -n "$trim_seconds" ]; then
+        validate_nonnegative_number "$trim_seconds" "trim-seconds"
     fi
 }
 
@@ -299,11 +328,17 @@ EOF
         cfr_args=( -vsync cfr )
     fi
 
+    trim_args=()
+    if [ -n "$trim_seconds" ]; then
+        trim_args=( -ss "$trim_seconds" )
+    fi
+
     ffmpeg \
         -hide_banner \
         -loglevel error \
         -y \
         -fflags +genpts \
+        "${trim_args[@]}" \
         -i "$input" \
         -map 0:v:0 \
         -map 0:a? \
@@ -382,6 +417,10 @@ info "using video encoder: $video_encoder"
 
 if [ "$rewrite" = true ]; then
     info "rewrite mode: creating a fresh MP4 encode"
+fi
+
+if [ -n "$trim_seconds" ]; then
+    info "trimming start by $trim_seconds seconds"
 fi
 
 cleanup() {

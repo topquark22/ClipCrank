@@ -65,6 +65,7 @@ Examples:
 ./all2mp4.sh archive.flv
 ./all2mp4.sh input.mov output.mp4
 ./all2mp4.sh --rewrite input.mp4 rewritten.mp4
+./all2mp4.sh --trim-seconds 0.04 input.mp4 output.mp4
 ```
 
 If `OUTPUT` is omitted, the script derives it from the input filename by replacing the extension with `.mp4`.
@@ -99,6 +100,30 @@ This can be useful when:
 - regenerating container structure after problematic source encodes
 
 Metadata edits such as `--title` or `--comment` are optional and independent of rewrite mode.
+
+## Trim Seconds
+
+The `--trim-seconds` option trims a small amount from the beginning of the media during conversion.
+
+Example:
+
+```sh
+./all2mp4.sh --trim-seconds 0.04 input.mp4 output.mp4
+```
+
+This can be useful when:
+
+- removing problematic leading frames
+- slightly shifting media timing during normalization
+- regenerating output that differs from the original timing structure
+
+The value is specified in seconds and may be fractional.
+
+Examples:
+
+- `0.04`
+- `0.0333`
+- `1.5`
 
 ## What the Script Does
 
