@@ -64,7 +64,6 @@ Examples:
 ./all2mp4.sh old-video.avi
 ./all2mp4.sh archive.flv
 ./all2mp4.sh input.mov output.mp4
-./all2mp4.sh --rewrite input.mp4 rewritten.mp4
 ./all2mp4.sh --trim-seconds 0.04 input.mp4 output.mp4
 ```
 
@@ -76,30 +75,7 @@ Examples:
 - `clip.flv` -> `clip.mp4`
 - `recording` -> `recording.mp4`
 
-## Rewrite Mode
-
-The `--rewrite` option explicitly forces creation of a freshly encoded MP4 output.
-
-Example:
-
-```sh
-./all2mp4.sh --rewrite input.mp4 rewritten.mp4
-```
-
-This mode:
-
-- decodes and re-encodes the media streams
-- regenerates timestamps and container structure
-- rebuilds the MP4 file layout
-- applies standard normalization settings
-
-This can be useful when:
-
-- creating a clean normalized copy of an existing MP4
-- improving compatibility with upload platforms or media players
-- regenerating container structure after problematic source encodes
-
-Metadata edits such as `--title` or `--comment` are optional and independent of rewrite mode.
+Existing MP4 inputs are also fully normalized and regenerated through the same conversion pipeline.
 
 ## Trim Seconds
 
