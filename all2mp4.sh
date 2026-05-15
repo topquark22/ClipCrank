@@ -5,6 +5,7 @@ progname="${0##*/}"
 
 preserve_metadata=false
 clear_metadata=false
+rewrite=false
 metadata_args=()
 positional_args=()
 
@@ -30,6 +31,7 @@ Options:
   --comment TEXT           Set comment metadata
   --preserve-metadata      Preserve input global metadata before applying edits
   --clear-metadata         Clear input global metadata before applying edits
+  --rewrite                Explicitly rewrite media as a fresh MP4 encode
   --fps N                  Convert output video to frame rate N
   --cfr                    Force constant frame rate output
   -h, --help               Show this help text
@@ -38,6 +40,7 @@ Examples:
   $progname old-video.avi
   $progname input.mov output.mp4
   $progname --title "New Title" input.avi
+  $progname --rewrite input.mp4 rewritten.mp4
   $progname --fps 30 input.mov
   $progname --fps 30 --cfr input.mov
 EOF
@@ -160,6 +163,10 @@ parse_args() {
                 ;;
             --clear-metadata)
                 clear_metadata=true
+                shift
+                ;;
+            --rewrite)
+                rewrite=true
                 shift
                 ;;
             --fps)
@@ -372,6 +379,10 @@ if ! video_encoder=$(select_video_encoder); then
 fi
 
 info "using video encoder: $video_encoder"
+
+if [ "$rewrite" = true ]; then
+    info "rewrite mode: creating a fresh MP4 encode"
+fi
 
 cleanup() {
     if [ -e "$tmp_output" ]; then
