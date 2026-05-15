@@ -9,8 +9,7 @@ metadata_args=()
 positional_args=()
 
 fps=
-vsync_mode=
-speed=
+cfr=false
 
 usage() {
     cat <<EOF
@@ -33,16 +32,14 @@ Options:
   --clear-metadata         Clear input global metadata before applying edits
   --fps N                  Convert output video to frame rate N
   --cfr                    Force constant frame rate output
-  --vfr                    Force variable frame rate output
-  --speed X                Adjust playback speed by factor X
   -h, --help               Show this help text
 
 Examples:
   $progname old-video.avi
   $progname input.mov output.mp4
   $progname --title "New Title" input.avi
+  $progname --fps 30 input.mov
   $progname --fps 30 --cfr input.mov
-  $progname --speed 1.25 input.wmv output.mp4
 EOF
 }
 
@@ -88,11 +85,36 @@ add_metadata_pair() {
 
 require_option_value() {
     option=$1
+    remaining=$2
 
-    if [ "$#" -lt 2 ]; then
+    if [ "$remaining" -lt 2 ]; then
         error "$option requires a value"
         exit 2
     fi
+}
+
+reject_equals_option() {
+    option=$1
+
+    error "use '$option VALUE', not '$option=VALUE'"
+    exit 2
+}
+
+set_metadata_option() {
+    option=$1
+    value=$2
+
+    case "$option" in
+        --title)   add_metadata title "$value" ;;
+        --artist)  add_metadata artist "$value" ;;
+        --album)   add_metadata album "$value" ;;
+        --date)    add_metadata date "$value" ;;
+        --comment) add_metadata comment "$value" ;;
+        *)
+            error "internal parser error for metadata option: $option"
+            exit 2
+            ;;
+    esac
 }
 
 validate_positive_number() {
@@ -119,59 +141,18 @@ parse_args() {
                 usage
                 exit 0
                 ;;
+            --*=*)
+                reject_equals_option "${1%%=*}"
+                ;;
             --metadata)
-                require_option_value "$1" "${2-}"
+                require_option_value "$1" "$#"
                 add_metadata_pair "$2"
                 shift 2
                 ;;
-            --metadata=*)
-                add_metadata_pair "${1#--metadata=}"
-                shift
-                ;;
-            --title)
-                require_option_value "$1" "${2-}"
-                add_metadata title "$2"
+            --title|--artist|--album|--date|--comment)
+                require_option_value "$1" "$#"
+                set_metadata_option "$1" "$2"
                 shift 2
-                ;;
-            --title=*)
-                add_metadata title "${1#--title=}"
-                shift
-                ;;
-            --artist)
-                require_option_value "$1" "${2-}"
-                add_metadata artist "$2"
-                shift 2
-                ;;
-            --artist=*)
-                add_metadata artist "${1#--artist=}"
-                shift
-                ;;
-            --album)
-                require_option_value "$1" "${2-}"
-                add_metadata album "$2"
-                shift 2
-                ;;
-            --album=*)
-                add_metadata album "${1#--album=}"
-                shift
-                ;;
-            --date)
-                require_option_value "$1" "${2-}"
-                add_metadata date "$2"
-                shift 2
-                ;;
-            --date=*)
-                add_metadata date "${1#--date=}"
-                shift
-                ;;
-            --comment)
-                require_option_value "$1" "${2-}"
-                add_metadata comment "$2"
-                shift 2
-                ;;
-            --comment=*)
-                add_metadata comment "${1#--comment=}"
-                shift
                 ;;
             --preserve-metadata)
                 preserve_metadata=true
@@ -182,29 +163,12 @@ parse_args() {
                 shift
                 ;;
             --fps)
-                require_option_value "$1" "${2-}"
+                require_option_value "$1" "$#"
                 fps=$2
                 shift 2
                 ;;
-            --fps=*)
-                fps=${1#--fps=}
-                shift
-                ;;
             --cfr)
-                vsync_mode=cfr
-                shift
-                ;;
-            --vfr)
-                vsync_mode=vfr
-                shift
-                ;;
-            --speed)
-                require_option_value "$1" "${2-}"
-                speed=$2
-                shift 2
-                ;;
-            --speed=*)
-                speed=${1#--speed=}
+                cfr=true
                 shift
                 ;;
             --)
@@ -233,10 +197,6 @@ parse_args() {
 
     if [ -n "$fps" ]; then
         validate_positive_number "$fps" "fps"
-    fi
-
-    if [ -n "$speed" ]; then
-        validate_positive_number "$speed" "speed"
     fi
 }
 
@@ -304,18 +264,8 @@ build_video_filters() {
         filters+=( "fps=$fps" )
     fi
 
-    if [ -n "$speed" ]; then
-        filters+=( "setpts=PTS/$speed" )
-    fi
-
     IFS=,
     printf '%s\n' "${filters[*]}"
-}
-
-build_audio_filters() {
-    if [ -n "$speed" ]; then
-        printf '%s\n' "atempo=$speed"
-    fi
 }
 
 run_ffmpeg() {
@@ -337,43 +287,32 @@ EOF
         metadata_mode_args=( -map_metadata 0 )
     fi
 
-    ffmpeg_args=(
-        -hide_banner
-        -loglevel error
-        -y
-        -fflags +genpts
-        -i "$input"
-        -map 0:v:0
-        -map 0:a?
-        -dn
-        -sn
-    )
-
-    if [ -n "$vsync_mode" ]; then
-        ffmpeg_args+=( -vsync "$vsync_mode" )
+    cfr_args=()
+    if [ "$cfr" = true ]; then
+        cfr_args=( -vsync cfr )
     fi
 
-    ffmpeg_args+=(
-        "${metadata_mode_args[@]}"
-        "${metadata_args[@]}"
-        "${encoder_args[@]}"
-        -pix_fmt yuv420p
-        -vf "$(build_video_filters)"
-    )
-
-    if [ -n "$speed" ]; then
-        ffmpeg_args+=( -af "$(build_audio_filters)" )
-    fi
-
-    ffmpeg_args+=(
-        -movflags +faststart
-        -c:a aac
-        -b:a 192k
-        -f mp4
+    ffmpeg \
+        -hide_banner \
+        -loglevel error \
+        -y \
+        -fflags +genpts \
+        -i "$input" \
+        -map 0:v:0 \
+        -map 0:a? \
+        -dn \
+        -sn \
+        "${cfr_args[@]}" \
+        "${metadata_mode_args[@]}" \
+        "${metadata_args[@]}" \
+        "${encoder_args[@]}" \
+        -pix_fmt yuv420p \
+        -vf "$(build_video_filters)" \
+        -movflags +faststart \
+        -c:a aac \
+        -b:a 192k \
+        -f mp4 \
         "$tmp_output"
-    )
-
-    ffmpeg "${ffmpeg_args[@]}"
 }
 
 parse_args "$@"
