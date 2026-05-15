@@ -64,6 +64,7 @@ Examples:
 ./all2mp4.sh old-video.avi
 ./all2mp4.sh archive.flv
 ./all2mp4.sh input.mov output.mp4
+./all2mp4.sh --rewrite input.mp4 rewritten.mp4
 ```
 
 If `OUTPUT` is omitted, the script derives it from the input filename by replacing the extension with `.mp4`.
@@ -73,6 +74,31 @@ Examples:
 - `movie.avi` -> `movie.mp4`
 - `clip.flv` -> `clip.mp4`
 - `recording` -> `recording.mp4`
+
+## Rewrite Mode
+
+The `--rewrite` option explicitly forces creation of a freshly encoded MP4 output.
+
+Example:
+
+```sh
+./all2mp4.sh --rewrite input.mp4 rewritten.mp4
+```
+
+This mode:
+
+- decodes and re-encodes the media streams
+- regenerates timestamps and container structure
+- rebuilds the MP4 file layout
+- applies standard normalization settings
+
+This can be useful when:
+
+- creating a clean normalized copy of an existing MP4
+- improving compatibility with upload platforms or media players
+- regenerating container structure after problematic source encodes
+
+Metadata edits such as `--title` or `--comment` are optional and independent of rewrite mode.
 
 ## What the Script Does
 
