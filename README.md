@@ -1,6 +1,6 @@
-# all2mp4
+# norm-vid
 
-`all2mp4.sh` is a small shell script that converts many kinds of video files into standardized MP4 output using `ffmpeg`.
+`norm-vid` is a small shell script that converts many kinds of video files into standardized MP4 output using `ffmpeg`.
 
 The goal is practical normalization:
 - MP4 container,
@@ -10,7 +10,7 @@ The goal is practical normalization:
 
 This project is intentionally simple. It is meant to be easy to read, easy to run, and useful on real media files, including older formats, as long as `ffmpeg` can decode them.
 
-`all2mp4.sh` is not intended to replace `ffmpeg`.
+`norm-vid` is not intended to replace `ffmpeg`.
 
 Instead, it acts as a practical simplification layer for common transcoding tasks. The script aims to expose a small number of useful and understandable options while relying on `ffmpeg` to perform the actual media processing.
 
@@ -55,16 +55,16 @@ Because `ffmpeg` builds vary by platform and packaging, the exact encoder used m
 ## Usage
 
 ```sh
-./all2mp4.sh INPUT [OUTPUT]
+./norm-vid INPUT [OUTPUT]
 ```
 
 Examples:
 
 ```sh
-./all2mp4.sh old-video.avi
-./all2mp4.sh archive.flv
-./all2mp4.sh input.mov output.mp4
-./all2mp4.sh --trim-seconds 0.04 input.mp4 output.mp4
+./norm-vid old-video.avi
+./norm-vid archive.flv
+./norm-vid input.mov output.mp4
+./norm-vid --trim-seconds 0.04 input.mp4 output.mp4
 ```
 
 If `OUTPUT` is omitted, the script derives it from the input filename by replacing the extension with `.mp4`.
@@ -84,7 +84,7 @@ The `--trim-seconds` option trims a small amount from the beginning of the media
 Example:
 
 ```sh
-./all2mp4.sh --trim-seconds 0.04 input.mp4 output.mp4
+./norm-vid --trim-seconds 0.04 input.mp4 output.mp4
 ```
 
 This can be useful when:
@@ -120,7 +120,7 @@ On successful conversion, it prints:
 ## Example Output
 
 ```text
-all2mp4.sh: using video encoder: libopenh264
+using video encoder: libopenh264
 created: Smile.mp4
 ```
 
@@ -159,13 +159,13 @@ It is a simple normalization tool, not a full transcoding framework.
 This repository includes:
 
 - `TEST_PLAN.md` for the manual test strategy and test matrix
-- `smoke-test.sh` for basic command-line smoke testing of failure paths
+- `test/smoke-test.sh` for basic command-line smoke testing of failure paths
 
 To run the smoke tests:
 
 ```sh
-chmod +x smoke-test.sh
-./smoke-test.sh
+chmod +x test/smoke-test.sh
+./test/smoke-test.sh
 ```
 
 For media-based validation, see `TEST_PLAN.md`.
@@ -193,15 +193,3 @@ Even so, hardware-backed encoders may still fail at runtime if drivers or system
 - exits non-zero on failure
 
 Errors are reported with human-readable messages on standard error.
-
-## Roadmap Ideas
-
-Possible future improvements include:
-
-- configurable overwrite mode
-- configurable quality settings
-- batch conversion
-- recursive directory handling
-- post-conversion verification with `ffprobe`
-- more automated tests with sample fixtures
-
