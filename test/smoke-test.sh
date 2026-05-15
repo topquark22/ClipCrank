@@ -4,7 +4,7 @@ set -eu
 progname="${0##*/}"
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
-target_script="$repo_root/all2mp4.sh"
+target_script="$repo_root/norm-vid"
 
 pass_count=0
 fail_count=0
@@ -51,7 +51,7 @@ make_temp_dir() {
         return
     fi
 
-    temp_dir="${TMPDIR:-/tmp}/all2mp4-smoke-$$"
+    temp_dir="${TMPDIR:-/tmp}/norm-vid-smoke-$$"
     mkdir -p "$temp_dir"
     printf '%s\n' "$temp_dir"
 }
