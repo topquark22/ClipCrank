@@ -65,6 +65,8 @@ Examples:
 ./norm-vid archive.flv
 ./norm-vid input.mov output.mp4
 ./norm-vid --trim-seconds 0.04 input.mp4 output.mp4
+./norm-vid --fps 30 input.mov
+./norm-vid --cfr input.mov
 ```
 
 If `OUTPUT` is omitted, the script derives it from the input filename by replacing the extension with `.mp4`.
@@ -76,6 +78,21 @@ Examples:
 - `recording` -> `recording.mp4`
 
 Existing MP4 inputs are also fully normalized and regenerated through the same conversion pipeline.
+
+## Frame Rate
+
+The `--fps N` option converts the output video to an explicit frame rate of `N` frames per second.
+
+The `--cfr` option forces constant-frame-rate output while allowing `ffmpeg` to determine the output rate from the source timing.
+
+These two options are alternatives and cannot be used together.
+
+Examples:
+
+```sh
+./norm-vid --fps 30 input.mov output.mp4
+./norm-vid --cfr input.mov output.mp4
+```
 
 ## Trim Seconds
 
