@@ -22,6 +22,7 @@ The design goal is convenience without unnecessary complexity.
 - Encodes video as H.264
 - Encodes audio as AAC when audio exists
 - Automatically detects a usable H.264 encoder from the local `ffmpeg` environment
+- Can create a clip from an explicit start time to an explicit end time
 - Tolerates missing audio streams
 - Ignores subtitle and data streams
 - Scales output dimensions to even values for encoder compatibility
@@ -65,6 +66,7 @@ Examples:
 ./norm-vid archive.flv
 ./norm-vid input.mov output.mp4
 ./norm-vid --trim-seconds 0.04 input.mp4 output.mp4
+./norm-vid --start 0:01:12.500 --end 0:02:05 input.mov clip.mp4
 ./norm-vid --fps 30 input.mov
 ./norm-vid --cfr input.mov
 ```
@@ -78,6 +80,31 @@ Examples:
 - `recording` -> `recording.mp4`
 
 Existing MP4 inputs are also fully normalized and regenerated through the same conversion pipeline.
+
+## Video Clips
+
+Use `--start TIME` and `--end TIME` together to create an output containing only that portion of the original video.
+
+Times use the form:
+
+```text
+h:m:s[.ms]
+```
+
+Hours may be any non-negative integer. Minutes and seconds must be between 0 and 59. The optional fractional part may contain one to three digits.
+
+Examples:
+
+```sh
+./norm-vid --start 0:01:12 --end 0:02:05 input.mov clip.mp4
+./norm-vid --start 1:03:04.250 --end 1:04:10.500 input.mov clip.mp4
+```
+
+The start and end times are positions in the original input. The end time must be later than the start time.
+
+`--start` and `--end` must always be supplied together. They cannot be combined with `--trim-seconds`.
+
+The clip is still fully normalized through the usual H.264/AAC conversion pipeline.
 
 ## Frame Rate
 
