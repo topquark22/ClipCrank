@@ -97,32 +97,38 @@ run_expect_failure_message "--fps and --cfr together should fail" \
     "$target_script" --fps 30 --cfr "$tmp_dir/does-not-exist.flv"
 
 run_expect_failure_message "invalid start timestamp should fail" \
-    "start must be in [h:]m:s[.ms] form" \
+    "start must be in [[h:]m:]s[.ms] form" \
     "$target_script" --start 0:61:00 "$tmp_dir/does-not-exist.flv"
 
 run_expect_failure_message "invalid end timestamp should fail" \
-    "end must be in [h:]m:s[.ms] form" \
+    "end must be in [[h:]m:]s[.ms] form" \
     "$target_script" --end 1:61 "$tmp_dir/does-not-exist.flv"
 
 run_expect_failure_message "clip end must be later than start" \
     "--end must be later than --start" \
-    "$target_script" --start 1:00 --end 0:59 "$tmp_dir/does-not-exist.flv"
+    "$target_script" --start 60 --end 59.999 "$tmp_dir/does-not-exist.flv"
 
 run_expect_failure_message "zero end time should fail" \
     "--end must be later than the start of the input" \
-    "$target_script" --end 0:00 "$tmp_dir/does-not-exist.flv"
+    "$target_script" --end 0 "$tmp_dir/does-not-exist.flv"
 
 run_expect_failure_message "removed trim-seconds option should fail" \
     "unknown option: --trim-seconds" \
     "$target_script" --trim-seconds 0.04 "$tmp_dir/does-not-exist.flv"
 
-run_expect_failure "abbreviated start-only clip should pass option validation" \
-    "$target_script" --start 1:02.500 "$tmp_dir/does-not-exist.flv"
+run_expect_failure "seconds-only start should pass option validation" \
+    "$target_script" --start 12.500 "$tmp_dir/does-not-exist.flv"
 
-run_expect_failure "abbreviated end-only clip should pass option validation" \
-    "$target_script" --end 2:05 "$tmp_dir/does-not-exist.flv"
+run_expect_failure "seconds-only end should pass option validation" \
+    "$target_script" --end 125 "$tmp_dir/does-not-exist.flv"
 
-run_expect_failure "mixed abbreviated and full clip times should pass validation" \
+run_expect_failure "minute-second clip should pass option validation" \
+    "$target_script" --start 1:02.500 --end 2:05 "$tmp_dir/does-not-exist.flv"
+
+run_expect_failure "mixed seconds and minute-second times should pass validation" \
+    "$target_script" --start 72.500 --end 2:05 "$tmp_dir/does-not-exist.flv"
+
+run_expect_failure "mixed minute-second and full clip times should pass validation" \
     "$target_script" --start 59:30 --end 1:00:00 "$tmp_dir/does-not-exist.flv"
 
 run_expect_failure "nonexistent input should fail" \
