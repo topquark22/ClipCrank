@@ -16,6 +16,11 @@ clip_start_seconds=
 clip_duration=
 frame_time=
 frame_seconds=
+frames_start=
+frames_start_seconds=
+frame_interval=
+frame_interval_seconds=
+frame_count=
 jpeg_quality=90
 jpeg_quality_set=false
 
@@ -23,11 +28,11 @@ usage() {
     cat <<EOF
 Usage: $progname [OPTIONS] INPUT [OUTPUT]
 
-Convert INPUT video into a standardized H.264/AAC MP4 file, or capture a JPEG frame.
+Convert INPUT video into a standardized H.264/AAC MP4 file, or capture JPEG frames.
 
 Arguments:
   INPUT                    Path to input video file
-  OUTPUT                   Optional output path
+  OUTPUT                   Optional output path or multi-frame output base
 
 Options:
   --metadata KEY=VALUE     Set an MP4 metadata field; may be repeated
@@ -41,6 +46,9 @@ Options:
   --start TIME             Start output at [[h:]m:]s[.ms]; defaults to input start
   --end TIME               End output at [[h:]m:]s[.ms]; defaults to input end
   --frame TIME             Capture one JPEG frame at [[h:]m:]s[.ms]
+  --frames TIME            Capture multiple JPEG frames starting at TIME
+  --interval TIME          Interval between frames; requires --frames
+  --count N                Number of frames to capture; requires --frames
   --jpeg-quality N         JPEG quality from 1 to 100; default 90
   --fps N                  Convert output video to frame rate N
   --cfr                    Force constant frame rate output; cannot be used with --fps
@@ -48,12 +56,11 @@ Options:
 
 Examples:
   $progname old-video.avi
-  $progname input.mov output.mp4
   $progname --start 12.500 --end 2:05 input.mov clip.mp4
   $progname --frame 1:23.500 input.mp4
+  $progname --frames 10 --interval 5 --count 4 input.mp4
+  $progname --frames 1:00 --interval 10 --count 3 input.mp4 shots.jpg
   $progname --frame 1:23.500 --jpeg-quality 95 input.mp4 still.jpg
-  $progname --fps 30 input.mov
-  $progname --cfr input.mov
 EOF
 }
 
@@ -65,20 +72,18 @@ derive_video_output_path() {
     input=$1
     case "$input" in
         *.*) printf '%s\n' "${input%.*}.mp4" ;;
-        *)   printf '%s\n' "${input}.mp4" ;;
+        *) printf '%s\n' "${input}.mp4" ;;
     esac
 }
 
-sanitize_timestamp_for_filename() {
-    printf '%s' "$1" | tr ':' '-'
-}
+sanitize_timestamp_for_filename() { printf '%s' "$1" | tr ':' '-'; }
 
 derive_frame_output_path() {
     input=$1
     timestamp=$(sanitize_timestamp_for_filename "$frame_time")
     case "$input" in
         *.*) printf '%s\n' "${input%.*}-${timestamp}.jpg" ;;
-        *)   printf '%s\n' "${input}-${timestamp}.jpg" ;;
+        *) printf '%s\n' "${input}-${timestamp}.jpg" ;;
     esac
 }
 
@@ -90,9 +95,7 @@ add_metadata_pair() {
     esac
 }
 
-require_option_value() {
-    if [ "$2" -lt 2 ]; then error "$1 requires a value"; exit 2; fi
-}
+require_option_value() { if [ "$2" -lt 2 ]; then error "$1 requires a value"; exit 2; fi; }
 reject_equals_option() { error "use '$1 VALUE', not '$1=VALUE'"; exit 2; }
 
 set_metadata_option() {
@@ -110,6 +113,12 @@ validate_positive_number() {
     value=$1; name=$2
     case "$value" in ''|*[!0-9.]*|*.*.*) error "$name must be a positive number"; exit 2 ;; esac
     awk "BEGIN { exit !($value > 0) }" || { error "$name must be greater than zero"; exit 2; }
+}
+
+validate_positive_integer() {
+    value=$1; name=$2
+    case "$value" in ''|*[!0-9]*) error "$name must be a positive integer"; exit 2 ;; esac
+    if [ "$value" -lt 1 ]; then error "$name must be a positive integer"; exit 2; fi
 }
 
 validate_jpeg_quality() {
@@ -133,6 +142,15 @@ timestamp_to_seconds() {
     awk -F: 'NF == 1 {printf "%.3f\n",$1;next} NF == 2 {printf "%.3f\n",($1*60)+$2;next} NF == 3 {printf "%.3f\n",($1*3600)+($2*60)+$3}' <<< "$1"
 }
 
+seconds_to_filename_timestamp() {
+    awk -v t="$1" 'BEGIN {
+        h=int(t/3600); t-=h*3600; m=int(t/60); s=t-m*60;
+        if (h>0) printf "%d-%02d-%06.3f",h,m,s;
+        else if (m>0) printf "%d-%06.3f",m,s;
+        else printf "%.3f",s;
+    }'
+}
+
 validate_clip() {
     if [ -n "$clip_start" ]; then validate_timestamp "$clip_start" start; clip_start_seconds=$(timestamp_to_seconds "$clip_start"); fi
     if [ -n "$clip_end" ]; then validate_timestamp "$clip_end" end; fi
@@ -147,18 +165,38 @@ validate_clip() {
     fi
 }
 
-validate_frame_mode() {
-    if [ -z "$frame_time" ]; then
-        if [ "$jpeg_quality_set" = true ]; then error "--jpeg-quality requires --frame"; exit 2; fi
+validate_frame_modes() {
+    if [ -n "$frame_time" ] && [ -n "$frames_start" ]; then error "--frame and --frames cannot be used together"; exit 2; fi
+
+    if [ -z "$frames_start" ]; then
+        if [ -n "$frame_interval" ]; then error "--interval requires --frames"; exit 2; fi
+        if [ -n "$frame_count" ]; then error "--count requires --frames"; exit 2; fi
+    else
+        validate_timestamp "$frames_start" frames
+        frames_start_seconds=$(timestamp_to_seconds "$frames_start")
+        if [ -z "$frame_interval" ]; then error "--frames requires --interval"; exit 2; fi
+        if [ -z "$frame_count" ]; then error "--frames requires --count"; exit 2; fi
+        validate_timestamp "$frame_interval" interval
+        frame_interval_seconds=$(timestamp_to_seconds "$frame_interval")
+        awk "BEGIN {exit !($frame_interval_seconds > 0)}" || { error "interval must be greater than zero"; exit 2; }
+        validate_positive_integer "$frame_count" count
+    fi
+
+    if [ -n "$frame_time" ]; then
+        validate_timestamp "$frame_time" frame
+        frame_seconds=$(timestamp_to_seconds "$frame_time")
+    fi
+
+    if [ -z "$frame_time" ] && [ -z "$frames_start" ]; then
+        if [ "$jpeg_quality_set" = true ]; then error "--jpeg-quality requires --frame or --frames"; exit 2; fi
         return
     fi
-    validate_timestamp "$frame_time" frame
-    frame_seconds=$(timestamp_to_seconds "$frame_time")
+
     validate_jpeg_quality
-    if [ -n "$clip_start" ] || [ -n "$clip_end" ]; then error "--frame cannot be used with --start or --end"; exit 2; fi
-    if [ -n "$fps" ] || [ "$cfr" = true ]; then error "--frame cannot be used with --fps or --cfr"; exit 2; fi
+    if [ -n "$clip_start" ] || [ -n "$clip_end" ]; then error "frame capture cannot be used with --start or --end"; exit 2; fi
+    if [ -n "$fps" ] || [ "$cfr" = true ]; then error "frame capture cannot be used with --fps or --cfr"; exit 2; fi
     if [ "$preserve_metadata" = true ] || [ "$clear_metadata" = true ] || [ "${#metadata_args[@]}" -gt 0 ]; then
-        error "--frame cannot be used with metadata options"
+        error "frame capture cannot be used with metadata options"
         exit 2
     fi
 }
@@ -175,6 +213,9 @@ parse_args() {
             --start) require_option_value "$1" "$#"; clip_start=$2; shift 2 ;;
             --end) require_option_value "$1" "$#"; clip_end=$2; shift 2 ;;
             --frame) require_option_value "$1" "$#"; frame_time=$2; shift 2 ;;
+            --frames) require_option_value "$1" "$#"; frames_start=$2; shift 2 ;;
+            --interval) require_option_value "$1" "$#"; frame_interval=$2; shift 2 ;;
+            --count) require_option_value "$1" "$#"; frame_count=$2; shift 2 ;;
             --jpeg-quality) require_option_value "$1" "$#"; jpeg_quality=$2; jpeg_quality_set=true; shift 2 ;;
             --fps) require_option_value "$1" "$#"; fps=$2; shift 2 ;;
             --cfr) cfr=true; shift ;;
@@ -188,7 +229,7 @@ parse_args() {
     if [ -n "$fps" ] && [ "$cfr" = true ]; then error "--fps and --cfr cannot be used together"; exit 2; fi
     if [ -n "$fps" ]; then validate_positive_number "$fps" fps; fi
     validate_clip
-    validate_frame_mode
+    validate_frame_modes
 }
 
 have_encoder() { ffmpeg -hide_banner -encoders 2>/dev/null | awk '{print $2}' | grep -Fx "$1" >/dev/null 2>&1; }
@@ -215,14 +256,12 @@ build_video_filters() {
     IFS=,; printf '%s\n' "${filters[*]}"
 }
 
-jpeg_qscale() {
-    awk "BEGIN { printf \"%d\", 31 - (($jpeg_quality - 1) * 29 / 99) }"
-}
+jpeg_qscale() { awk "BEGIN { printf \"%d\", 31 - (($jpeg_quality - 1) * 29 / 99) }"; }
 
-run_ffmpeg_frame() {
-    input=$1; tmp_output=$2
+capture_frame() {
+    input=$1; timestamp_seconds=$2; tmp_output=$3
     ffmpeg -hide_banner -loglevel error -y \
-        -ss "$frame_seconds" -i "$input" \
+        -ss "$timestamp_seconds" -i "$input" \
         -map 0:v:0 -frames:v 1 -q:v "$(jpeg_qscale)" \
         -f image2 "$tmp_output"
 }
@@ -245,43 +284,90 @@ EOF
         -movflags +faststart -c:a aac -b:a 192k -f mp4 "$tmp_output"
 }
 
+multi_frame_output_base() {
+    input=$1; requested=${2:-}
+    if [ -n "$requested" ]; then
+        case "$requested" in
+            *.jpg) printf '%s\n' "${requested%.jpg}" ;;
+            *.jpeg) printf '%s\n' "${requested%.jpeg}" ;;
+            *) printf '%s\n' "$requested" ;;
+        esac
+    else
+        case "$input" in
+            *.*) printf '%s\n' "${input%.*}" ;;
+            *) printf '%s\n' "$input" ;;
+        esac
+    fi
+}
+
 parse_args "$@"
 if [ "${#positional_args[@]}" -lt 1 ] || [ "${#positional_args[@]}" -gt 2 ]; then usage >&2; exit 2; fi
 input=${positional_args[0]}
-if [ -n "$frame_time" ]; then output=${positional_args[1]:-$(derive_frame_output_path "$input")}; else output=${positional_args[1]:-$(derive_video_output_path "$input")}; fi
+requested_output=${positional_args[1]:-}
 
 if ! have_command ffmpeg; then error "ffmpeg is not installed or not on PATH"; exit 127; fi
 if [ ! -e "$input" ]; then error "input file not found: $input"; exit 1; fi
 if [ ! -f "$input" ]; then error "input path is not a regular file: $input"; exit 1; fi
 if [ ! -r "$input" ]; then error "input file is not readable: $input"; exit 1; fi
-if [ "$input" = "$output" ]; then error "input and output paths must be different"; exit 1; fi
-if [ -e "$output" ]; then error "output file already exists: $output"; exit 1; fi
+
+if [ -n "$frames_start" ]; then
+    base=$(multi_frame_output_base "$input" "$requested_output")
+    outputs=(); timestamps=(); tmp_outputs=()
+    i=0
+    while [ "$i" -lt "$frame_count" ]; do
+        ts=$(awk "BEGIN {printf \"%.3f\", $frames_start_seconds + ($i * $frame_interval_seconds)}")
+        label=$(seconds_to_filename_timestamp "$ts")
+        out="${base}-${label}.jpg"
+        tmp="${base}-${label}.part.jpg"
+        if [ -e "$out" ]; then error "output file already exists: $out"; exit 1; fi
+        outputs+=( "$out" ); timestamps+=( "$ts" ); tmp_outputs+=( "$tmp" )
+        i=$((i + 1))
+    done
+    info "capturing $frame_count frames starting at $frames_start every $frame_interval with JPEG quality $jpeg_quality"
+    cleanup_multi() { for f in "${tmp_outputs[@]}"; do [ ! -e "$f" ] || rm -f "$f"; done; }
+    trap cleanup_multi EXIT INT TERM HUP
+    i=0
+    while [ "$i" -lt "$frame_count" ]; do
+        if ! capture_frame "$input" "${timestamps[$i]}" "${tmp_outputs[$i]}"; then error "frame capture failed at ${timestamps[$i]} seconds"; exit 1; fi
+        mv -- "${tmp_outputs[$i]}" "${outputs[$i]}"
+        printf 'created: %s\n' "${outputs[$i]}"
+        i=$((i + 1))
+    done
+    trap - EXIT INT TERM HUP
+    exit 0
+fi
 
 if [ -n "$frame_time" ]; then
+    output=${requested_output:-$(derive_frame_output_path "$input")}
+    if [ "$input" = "$output" ]; then error "input and output paths must be different"; exit 1; fi
+    if [ -e "$output" ]; then error "output file already exists: $output"; exit 1; fi
     case "$output" in *.jpg|*.jpeg) ;; *) error "frame output must use .jpg or .jpeg"; exit 2 ;; esac
     case "$output" in *.jpg) tmp_output="${output%.jpg}.part.jpg" ;; *.jpeg) tmp_output="${output%.jpeg}.part.jpeg" ;; esac
     info "capturing frame at $frame_time with JPEG quality $jpeg_quality"
-else
-    if ! have_aac_encoder; then error "AAC encoder not found in ffmpeg"; exit 1; fi
-    case "$output" in *.mp4) tmp_output="${output%.mp4}.part.mp4" ;; *) tmp_output="${output}.part.mp4" ;; esac
-    if ! video_encoder=$(select_video_encoder); then
-        error "no supported H.264 encoder found in ffmpeg"
-        error "tried: libx264, libopenh264, h264_nvenc, h264_qsv, h264_amf, h264_mf, h264_d3d12va, h264_vulkan, h264_videotoolbox"
-        exit 1
-    fi
-    info "using video encoder: $video_encoder"
-    if [ -n "$clip_start" ] && [ -n "$clip_end" ]; then info "creating clip from $clip_start to $clip_end"; elif [ -n "$clip_start" ]; then info "creating clip from $clip_start to end of input"; elif [ -n "$clip_end" ]; then info "creating clip from start of input to $clip_end"; fi
+    cleanup() { [ ! -e "$tmp_output" ] || rm -f "$tmp_output"; }
+    trap cleanup EXIT INT TERM HUP
+    if ! capture_frame "$input" "$frame_seconds" "$tmp_output"; then error "frame capture failed"; exit 1; fi
+    mv -- "$tmp_output" "$output"
+    trap - EXIT INT TERM HUP
+    printf 'created: %s\n' "$output"
+    exit 0
 fi
 
-cleanup() { if [ -e "$tmp_output" ]; then rm -f "$tmp_output"; fi; }
+output=${requested_output:-$(derive_video_output_path "$input")}
+if [ "$input" = "$output" ]; then error "input and output paths must be different"; exit 1; fi
+if [ -e "$output" ]; then error "output file already exists: $output"; exit 1; fi
+if ! have_aac_encoder; then error "AAC encoder not found in ffmpeg"; exit 1; fi
+case "$output" in *.mp4) tmp_output="${output%.mp4}.part.mp4" ;; *) tmp_output="${output}.part.mp4" ;; esac
+if ! video_encoder=$(select_video_encoder); then
+    error "no supported H.264 encoder found in ffmpeg"
+    error "tried: libx264, libopenh264, h264_nvenc, h264_qsv, h264_amf, h264_mf, h264_d3d12va, h264_vulkan, h264_videotoolbox"
+    exit 1
+fi
+info "using video encoder: $video_encoder"
+if [ -n "$clip_start" ] && [ -n "$clip_end" ]; then info "creating clip from $clip_start to $clip_end"; elif [ -n "$clip_start" ]; then info "creating clip from $clip_start to end of input"; elif [ -n "$clip_end" ]; then info "creating clip from start of input to $clip_end"; fi
+cleanup() { [ ! -e "$tmp_output" ] || rm -f "$tmp_output"; }
 trap cleanup EXIT INT TERM HUP
-
-if [ -n "$frame_time" ]; then
-    if ! run_ffmpeg_frame "$input" "$tmp_output"; then error "frame capture failed"; exit 1; fi
-else
-    if ! run_ffmpeg "$video_encoder" "$input" "$tmp_output"; then error "conversion failed"; exit 1; fi
-fi
-
+if ! run_ffmpeg "$video_encoder" "$input" "$tmp_output"; then error "conversion failed"; exit 1; fi
 mv -- "$tmp_output" "$output"
 trap - EXIT INT TERM HUP
 printf 'created: %s\n' "$output"
