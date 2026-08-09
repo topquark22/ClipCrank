@@ -34,8 +34,8 @@ Options:
   --comment TEXT           Set comment metadata
   --preserve-metadata      Preserve input global metadata before applying edits
   --clear-metadata         Clear input global metadata before applying edits
-  --start TIME             Start output at [h:]m:s[.ms]; defaults to input start
-  --end TIME               End output at [h:]m:s[.ms]; defaults to input end
+  --start TIME             Start output at [[h:]m:]s[.ms]; defaults to input start
+  --end TIME               End output at [[h:]m:]s[.ms]; defaults to input end
   --fps N                  Convert output video to frame rate N
   --cfr                    Force constant frame rate output; cannot be used with --fps
   -h, --help               Show this help text
@@ -44,7 +44,7 @@ Examples:
   $progname old-video.avi
   $progname input.mov output.mp4
   $progname --title "New Title" input.avi
-  $progname --start 1:12.500 input.mov clip.mp4
+  $progname --start 12.500 input.mov clip.mp4
   $progname --end 2:05 input.mov clip.mp4
   $progname --start 1:12.500 --end 2:05 input.mov clip.mp4
   $progname --start 1:03:04.250 --end 1:04:10.500 input.mov clip.mp4
@@ -148,6 +148,10 @@ validate_timestamp() {
     value=$1
     name=$2
 
+    if [[ "$value" =~ ^[0-9]+(\.[0-9]{1,3})?$ ]]; then
+        return
+    fi
+
     if [[ "$value" =~ ^[0-9]+:([0-5]?[0-9])(\.[0-9]{1,3})?$ ]]; then
         return
     fi
@@ -156,12 +160,13 @@ validate_timestamp() {
         return
     fi
 
-    error "$name must be in [h:]m:s[.ms] form"
+    error "$name must be in [[h:]m:]s[.ms] form"
     exit 2
 }
 
 timestamp_to_seconds() {
     awk -F: '
+        NF == 1 { printf "%.3f\n", $1; next }
         NF == 2 { printf "%.3f\n", ($1 * 60) + $2; next }
         NF == 3 { printf "%.3f\n", ($1 * 3600) + ($2 * 60) + $3 }
     ' <<< "$1"
@@ -326,7 +331,7 @@ video_encoder_args() {
                 -c:v libopenh264 \
                 -b:v 5000k
             ;;
-        h264_nvenc|h264_qsv|h264_amf|h264_mf|h264_d3d12va|h264_vulkan|h264_videotoolbox)
+        h264_nvenc|h264_qsv|h264_amf|h264_mf|h264_d3d12va|h264_videotoolbox)
             printf '%s\n' \
                 -c:v "$encoder" \
                 -b:v 5000k
