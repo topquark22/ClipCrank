@@ -11,6 +11,9 @@ positional_args=()
 fps=
 cfr=false
 trim_seconds=
+clip_start=
+clip_end=
+clip_duration=
 
 usage() {
     cat <<EOF
@@ -32,6 +35,8 @@ Options:
   --preserve-metadata      Preserve input global metadata before applying edits
   --clear-metadata         Clear input global metadata before applying edits
   --trim-seconds N         Trim N seconds from the start during conversion
+  --start TIME             Clip start time as h:m:s[.ms]; requires --end
+  --end TIME               Clip end time as h:m:s[.ms]; requires --start
   --fps N                  Convert output video to frame rate N
   --cfr                    Force constant frame rate output; cannot be used with --fps
   -h, --help               Show this help text
@@ -41,6 +46,7 @@ Examples:
   $progname input.mov output.mp4
   $progname --title "New Title" input.avi
   $progname --trim-seconds 0.04 input.mp4 output.mp4
+  $progname --start 0:01:12.500 --end 0:02:05 input.mov clip.mp4
   $progname --fps 30 input.mov
   $progname --cfr input.mov
 EOF
@@ -154,6 +160,54 @@ validate_positive_number() {
     }
 }
 
+validate_timestamp() {
+    value=$1
+    name=$2
+
+    if [[ ! "$value" =~ ^[0-9]+:([0-5]?[0-9]):([0-5]?[0-9])(\.[0-9]{1,3})?$ ]]; then
+        error "$name must be in h:m:s[.ms] form"
+        exit 2
+    fi
+}
+
+timestamp_to_seconds() {
+    awk -F: '{ printf "%.3f\n", ($1 * 3600) + ($2 * 60) + $3 }' <<< "$1"
+}
+
+validate_clip() {
+    if [ -n "$clip_start" ] && [ -z "$clip_end" ]; then
+        error "--start requires --end"
+        exit 2
+    fi
+
+    if [ -z "$clip_start" ] && [ -n "$clip_end" ]; then
+        error "--end requires --start"
+        exit 2
+    fi
+
+    if [ -z "$clip_start" ]; then
+        return
+    fi
+
+    if [ -n "$trim_seconds" ]; then
+        error "--trim-seconds cannot be used with --start and --end"
+        exit 2
+    fi
+
+    validate_timestamp "$clip_start" "start"
+    validate_timestamp "$clip_end" "end"
+
+    start_seconds=$(timestamp_to_seconds "$clip_start")
+    end_seconds=$(timestamp_to_seconds "$clip_end")
+
+    awk "BEGIN { exit !($end_seconds > $start_seconds) }" || {
+        error "--end must be later than --start"
+        exit 2
+    }
+
+    clip_duration=$(awk "BEGIN { printf \"%.3f\", $end_seconds - $start_seconds }")
+}
+
 parse_args() {
     while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -185,6 +239,16 @@ parse_args() {
             --trim-seconds)
                 require_option_value "$1" "$#"
                 trim_seconds=$2
+                shift 2
+                ;;
+            --start)
+                require_option_value "$1" "$#"
+                clip_start=$2
+                shift 2
+                ;;
+            --end)
+                require_option_value "$1" "$#"
+                clip_end=$2
                 shift 2
                 ;;
             --fps)
@@ -232,6 +296,8 @@ parse_args() {
     if [ -n "$trim_seconds" ]; then
         validate_nonnegative_number "$trim_seconds" "trim-seconds"
     fi
+
+    validate_clip
 }
 
 have_encoder() {
@@ -326,9 +392,16 @@ EOF
         cfr_args=( -vsync cfr )
     fi
 
-    trim_args=()
-    if [ -n "$trim_seconds" ]; then
-        trim_args=( -ss "$trim_seconds" )
+    seek_args=()
+    if [ -n "$clip_start" ]; then
+        seek_args=( -ss "$clip_start" )
+    elif [ -n "$trim_seconds" ]; then
+        seek_args=( -ss "$trim_seconds" )
+    fi
+
+    duration_args=()
+    if [ -n "$clip_duration" ]; then
+        duration_args=( -t "$clip_duration" )
     fi
 
     ffmpeg \
@@ -336,8 +409,9 @@ EOF
         -loglevel error \
         -y \
         -fflags +genpts \
-        "${trim_args[@]}" \
+        "${seek_args[@]}" \
         -i "$input" \
+        "${duration_args[@]}" \
         -map 0:v:0 \
         -map 0:a? \
         -dn \
@@ -415,6 +489,10 @@ info "using video encoder: $video_encoder"
 
 if [ -n "$trim_seconds" ]; then
     info "trimming start by $trim_seconds seconds"
+fi
+
+if [ -n "$clip_start" ]; then
+    info "creating clip from $clip_start to $clip_end"
 fi
 
 cleanup() {
