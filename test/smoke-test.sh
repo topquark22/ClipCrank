@@ -45,6 +45,22 @@ run_expect_failure() {
     fi
 }
 
+run_expect_failure_message() {
+    test_name=$1
+    expected=$2
+    shift 2
+
+    if output=$("$@" 2>&1); then
+        fail "$test_name"
+        return
+    fi
+
+    case "$output" in
+        *"$expected"*) pass "$test_name" ;;
+        *) fail "$test_name" ;;
+    esac
+}
+
 make_temp_dir() {
     if command -v mktemp >/dev/null 2>&1; then
         mktemp -d
@@ -76,8 +92,29 @@ say
 run_expect_failure "no arguments should fail" \
     "$target_script"
 
-run_expect_failure "--fps and --cfr together should fail" \
+run_expect_failure_message "--fps and --cfr together should fail" \
+    "--fps and --cfr cannot be used together" \
     "$target_script" --fps 30 --cfr "$tmp_dir/does-not-exist.flv"
+
+run_expect_failure_message "--start without --end should fail" \
+    "--start requires --end" \
+    "$target_script" --start 0:00:01 "$tmp_dir/does-not-exist.flv"
+
+run_expect_failure_message "--end without --start should fail" \
+    "--end requires --start" \
+    "$target_script" --end 0:00:02 "$tmp_dir/does-not-exist.flv"
+
+run_expect_failure_message "invalid clip timestamp should fail" \
+    "start must be in h:m:s[.ms] form" \
+    "$target_script" --start 0:61:00 --end 1:00:00 "$tmp_dir/does-not-exist.flv"
+
+run_expect_failure_message "clip end must be later than start" \
+    "--end must be later than --start" \
+    "$target_script" --start 0:01:00 --end 0:00:59 "$tmp_dir/does-not-exist.flv"
+
+run_expect_failure_message "clip and trim should be incompatible" \
+    "--trim-seconds cannot be used with --start and --end" \
+    "$target_script" --trim-seconds 0.04 --start 0:00:01 --end 0:00:02 "$tmp_dir/does-not-exist.flv"
 
 run_expect_failure "nonexistent input should fail" \
     "$target_script" "$tmp_dir/does-not-exist.flv"
