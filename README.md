@@ -65,9 +65,10 @@ Examples:
 ./norm-vid old-video.avi
 ./norm-vid archive.flv
 ./norm-vid input.mov output.mp4
-./norm-vid --start 0:01:12.500 input.mov clip.mp4
-./norm-vid --end 0:02:05 input.mov clip.mp4
-./norm-vid --start 0:01:12.500 --end 0:02:05 input.mov clip.mp4
+./norm-vid --start 1:12.500 input.mov clip.mp4
+./norm-vid --end 2:05 input.mov clip.mp4
+./norm-vid --start 1:12.500 --end 2:05 input.mov clip.mp4
+./norm-vid --start 1:03:04.250 --end 1:04:10.500 input.mov clip.mp4
 ./norm-vid --fps 30 input.mov
 ./norm-vid --cfr input.mov
 ```
@@ -86,27 +87,41 @@ Existing MP4 inputs are also fully normalized and regenerated through the same c
 
 Use `--start TIME`, `--end TIME`, or both to create an output containing only part of the original video.
 
-Times use the form:
+Times may use either form:
 
 ```text
+m:s[.ms]
 h:m:s[.ms]
 ```
 
-Hours may be any non-negative integer. Minutes and seconds must be between 0 and 59. The optional fractional part may contain one to three digits.
+If the hours field is omitted, it defaults to zero. Hours and minutes may be non-negative integers as appropriate to the form; seconds must be between 0 and 59. In the three-field form, the minutes field must also be between 0 and 59. The optional fractional part may contain one to three digits.
+
+Examples of equivalent times:
+
+```text
+1:12.500
+0:01:12.500
+```
 
 `--start` specifies where the output begins. If `--end` is omitted, the output continues to the end of the input.
 
 ```sh
-./norm-vid --start 0:01:12.500 input.mov clip.mp4
+./norm-vid --start 1:12.500 input.mov clip.mp4
 ```
 
 `--end` specifies where the output ends. If `--start` is omitted, the output begins at the start of the input.
 
 ```sh
-./norm-vid --end 0:02:05 input.mov clip.mp4
+./norm-vid --end 2:05 input.mov clip.mp4
 ```
 
 When both are supplied, the output contains the interval between the two positions:
+
+```sh
+./norm-vid --start 1:12.500 --end 2:05 input.mov clip.mp4
+```
+
+Longer timestamps may still include hours explicitly:
 
 ```sh
 ./norm-vid --start 1:03:04.250 --end 1:04:10.500 input.mov clip.mp4
