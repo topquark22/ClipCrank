@@ -1,6 +1,6 @@
 # Test Plan
 
-This document describes how to test `all2mp4.sh`.
+This document describes how to test `norm-vid`.
 
 The project is small, so the testing approach is intentionally practical:
 - verify that the script works on representative real-world files,
@@ -9,12 +9,13 @@ The project is small, so the testing approach is intentionally practical:
 
 ## Goals
 
-The test plan aims to confirm that `all2mp4.sh`:
+The test plan aims to confirm that `norm-vid`:
 
 - accepts a variety of input containers,
 - converts them into playable `.mp4` output,
 - selects a working H.264 encoder from the local `ffmpeg` environment,
 - uses AAC audio when audio is present,
+- creates clips with the requested start and end times,
 - succeeds on old or awkward media when `ffmpeg` can decode it,
 - fails clearly when prerequisites or input files are missing,
 - avoids clobbering existing output files.
@@ -48,7 +49,7 @@ Testing should combine:
    - Verify argument handling and error reporting.
 
 3. **Output inspection**
-   - Use `ffprobe` where available to confirm output container and codecs.
+   - Use `ffprobe` where available to confirm output container, codecs, duration, and clip timing.
 
 ## Environment Notes
 
@@ -86,7 +87,7 @@ A test is considered successful when:
 Example command:
 
 ```sh
-./all2mp4.sh sample.flv output.mp4
+./norm-vid sample.flv output.mp4
 ```
 
 Expected result:
@@ -102,7 +103,7 @@ Expected result:
 Example command:
 
 ```sh
-./all2mp4.sh silent.flv silent.mp4
+./norm-vid silent.flv silent.mp4
 ```
 
 Expected result:
@@ -117,7 +118,7 @@ Expected result:
 Example command:
 
 ```sh
-./all2mp4.sh sample.avi sample.mp4
+./norm-vid sample.avi sample.mp4
 ```
 
 Expected result:
@@ -132,7 +133,7 @@ Expected result:
 Example command:
 
 ```sh
-./all2mp4.sh sample.mov sample.mp4
+./norm-vid sample.mov sample.mp4
 ```
 
 Expected result:
@@ -146,7 +147,7 @@ Expected result:
 Example command:
 
 ```sh
-./all2mp4.sh sample.mkv sample.mp4
+./norm-vid sample.mkv sample.mp4
 ```
 
 Expected result:
@@ -160,7 +161,7 @@ Expected result:
 Example command:
 
 ```sh
-./all2mp4.sh odd-dimensions.mkv odd-dimensions.mp4
+./norm-vid odd-dimensions.mkv odd-dimensions.mp4
 ```
 
 Expected result:
@@ -175,7 +176,7 @@ Expected result:
 Example command:
 
 ```sh
-./all2mp4.sh video-only.avi video-only.mp4
+./norm-vid video-only.avi video-only.mp4
 ```
 
 Expected result:
@@ -190,7 +191,7 @@ Expected result:
 Example command:
 
 ```sh
-./all2mp4.sh extra-streams.mkv extra-streams.mp4
+./norm-vid extra-streams.mkv extra-streams.mp4
 ```
 
 Expected result:
@@ -206,7 +207,7 @@ Expected result:
 Example command:
 
 ```sh
-./all2mp4.sh input.mp4 normalized.mp4
+./norm-vid input.mp4 normalized.mp4
 ```
 
 Expected result:
@@ -214,51 +215,70 @@ Expected result:
 - output is recreated cleanly,
 - no conflict with temporary filename behavior.
 
+### 10. Create a video clip
+
+**Purpose:** verify that explicit start and end times produce only the requested portion of the input.
+
+Example command:
+
+```sh
+./norm-vid --start 0:00:10.250 --end 0:00:20.750 input.mp4 clip.mp4
+```
+
+Expected result:
+- succeeds,
+- output begins at approximately 10.250 seconds in the original input,
+- output ends at approximately 20.750 seconds in the original input,
+- output duration is approximately 10.500 seconds,
+- output remains normalized as H.264/AAC.
+
+Use `ffprobe` to check the resulting duration when practical. Small differences at frame or audio-sample boundaries are acceptable.
+
 ## Failure Case Matrix
 
-### 10. Missing input argument
+### 11. Missing input argument
 
 Command:
 
 ```sh
-./all2mp4.sh
+./norm-vid
 ```
 
 Expected result:
 - usage shown,
 - non-zero exit status.
 
-### 11. Nonexistent input file
+### 12. Nonexistent input file
 
 Command:
 
 ```sh
-./all2mp4.sh does-not-exist.flv out.mp4
+./norm-vid does-not-exist.flv out.mp4
 ```
 
 Expected result:
 - clear error message,
 - non-zero exit status.
 
-### 12. Input path is not a regular file
+### 13. Input path is not a regular file
 
 Command:
 
 ```sh
-./all2mp4.sh . out.mp4
+./norm-vid . out.mp4
 ```
 
 Expected result:
 - clear error message,
 - non-zero exit status.
 
-### 13. Output file already exists
+### 14. Output file already exists
 
 Command:
 
 ```sh
 touch out.mp4
-./all2mp4.sh sample.flv out.mp4
+./norm-vid sample.flv out.mp4
 ```
 
 Expected result:
@@ -266,7 +286,55 @@ Expected result:
 - existing output file is not overwritten,
 - non-zero exit status.
 
-### 14. ffmpeg missing from PATH
+### 15. Clip start without end
+
+Command:
+
+```sh
+./norm-vid --start 0:00:10 input.mp4 out.mp4
+```
+
+Expected result:
+- clear error that `--start` requires `--end`,
+- non-zero exit status.
+
+### 16. Clip end before start
+
+Command:
+
+```sh
+./norm-vid --start 0:00:20 --end 0:00:10 input.mp4 out.mp4
+```
+
+Expected result:
+- clear error that the end must be later than the start,
+- non-zero exit status.
+
+### 17. Invalid clip timestamp
+
+Command:
+
+```sh
+./norm-vid --start 0:61:00 --end 1:00:00 input.mp4 out.mp4
+```
+
+Expected result:
+- clear timestamp-format error,
+- non-zero exit status.
+
+### 18. Clip combined with trim-seconds
+
+Command:
+
+```sh
+./norm-vid --trim-seconds 0.04 --start 0:00:10 --end 0:00:20 input.mp4 out.mp4
+```
+
+Expected result:
+- clear option-conflict error,
+- non-zero exit status.
+
+### 19. ffmpeg missing from PATH
 
 Method:
 - temporarily run in an environment where `ffmpeg` is not available.
@@ -275,7 +343,7 @@ Expected result:
 - clear error message,
 - exit status indicates failure.
 
-### 15. No usable H.264 encoder available
+### 20. No usable H.264 encoder available
 
 Method:
 - run in an environment where `ffmpeg` exists but exposes no supported H.264 encoder.
@@ -284,7 +352,7 @@ Expected result:
 - clear error message,
 - non-zero exit status.
 
-### 16. No AAC encoder available
+### 21. No AAC encoder available
 
 Method:
 - run in an environment where `ffmpeg` exists but has no AAC encoder.
@@ -298,7 +366,7 @@ Expected result:
 Where `ffprobe` is available, inspect the output:
 
 ```sh
-ffprobe -v error -show_entries format=format_name -of default=nw=1 output.mp4
+ffprobe -v error -show_entries format=format_name,duration -of default=nw=1 output.mp4
 ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=nw=1 output.mp4
 ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=nw=1 output.mp4
 ```
@@ -310,6 +378,8 @@ Expected values:
 
 For video-only outputs, the audio probe may return nothing.
 
+For clip outputs, compare the reported duration with `end - start`, allowing for normal frame/audio-sample boundary differences.
+
 ## Recommended Test Media Set
 
 A useful starter set would include:
@@ -320,7 +390,8 @@ A useful starter set would include:
 - one `.mkv`,
 - one file with no audio,
 - one file with odd dimensions,
-- one file with subtitles or extra streams.
+- one file with subtitles or extra streams,
+- one input long enough to test clipping at known visual or audio landmarks.
 
 These files do not need to be large. Short samples are preferable.
 
@@ -330,8 +401,9 @@ After every meaningful script change, re-run at least:
 
 1. one known-good FLV conversion,
 2. one no-audio case,
-3. one failure case such as nonexistent input,
-4. one case where output file already exists.
+3. one clip conversion,
+4. one failure case such as nonexistent input,
+5. one case where output file already exists.
 
 This gives a fast confidence check without requiring a full test pass.
 
@@ -339,7 +411,6 @@ This gives a fast confidence check without requiring a full test pass.
 
 Possible future testing improvements:
 
-- a `smoke-test.sh` helper script,
 - automated fixture-based tests,
 - scripted `ffprobe` assertions,
 - CI coverage for argument and error behavior,
@@ -353,6 +424,7 @@ For manual test sessions, record results like this:
 |---|---|---|---|---|---|
 | FLV with audio | `sample.flv` | Playable MP4 with H.264/AAC |  |  |  |
 | AVI input | `sample.avi` | Playable MP4 |  |  |  |
+| Video clip | `input.mp4` | Requested interval only |  |  |  |
 | Missing input | none | Usage + non-zero exit |  |  |  |
 | Output exists | `sample.flv` -> existing `out.mp4` | Refuse overwrite |  |  |  |
 
@@ -362,6 +434,7 @@ For this project, testing should remain simple, concrete, and media-driven.
 
 The priority is not perfect formalism. The priority is confidence that:
 - old and awkward files can be converted,
+- requested clips contain the intended portion of the source,
 - the output is playable,
 - the script fails clearly when it should,
 - and behavior remains stable as the script evolves.
