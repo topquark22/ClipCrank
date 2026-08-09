@@ -1,6 +1,6 @@
 # norm-vid
 
-`norm-vid` converts many kinds of video files into standardized MP4 output using `ffmpeg`. It can also capture a single JPEG still frame from a video.
+`norm-vid` converts many kinds of video files into standardized MP4 output using `ffmpeg`. It can also capture one or more JPEG still frames from a video.
 
 The normalization goal is practical compatibility:
 - MP4 container,
@@ -16,7 +16,8 @@ The project is intentionally simple: a small convenience layer over `ffmpeg`, no
 - Encodes video as H.264 and audio as AAC
 - Automatically detects a usable H.264 encoder
 - Creates clips using an optional start time, end time, or both
-- Captures a JPEG still frame at a requested timestamp
+- Captures one JPEG still frame at a requested timestamp
+- Captures multiple JPEG frames from a start time, interval, and count
 - Supports configurable JPEG quality, defaulting to 90
 - Tolerates missing audio streams
 - Ignores subtitle and data streams
@@ -43,19 +44,12 @@ Examples:
 ./norm-vid input.mov output.mp4
 ./norm-vid --start 12.500 --end 2:05 input.mov clip.mp4
 ./norm-vid --frame 1:23.500 input.mp4
+./norm-vid --frames 10 --interval 5 --count 4 input.mp4
+./norm-vid --frames 1:00 --interval 10 --count 3 input.mp4 shots.jpg
 ./norm-vid --frame 1:23.500 --jpeg-quality 95 input.mp4 still.jpg
-./norm-vid --fps 30 input.mov
-./norm-vid --cfr input.mov
 ```
 
 For normal video conversion, omitted `OUTPUT` is derived by replacing the input extension with `.mp4`.
-
-For frame capture, omitted `OUTPUT` includes the requested timestamp. Colons are replaced by hyphens so the filename remains portable. For example:
-
-```text
-norm-vid --frame 1:23.500 movie.mp4
-movie.mp4 -> movie-1-23.500.jpg
-```
 
 Existing output files are never overwritten.
 
@@ -89,6 +83,8 @@ If `--start` is omitted, output begins at the start of the input. If `--end` is 
 
 ## JPEG Frame Capture
 
+### Single frame
+
 Use `--frame TIME` to capture one still frame from the first video stream:
 
 ```sh
@@ -96,34 +92,67 @@ Use `--frame TIME` to capture one still frame from the first video stream:
 ./norm-vid --frame 1:23.500 input.mp4 still.jpg
 ```
 
-`--frame` uses the same `[[h:]m:]s[.ms]` timestamp syntax as clipping.
-
-If no output path is supplied, the timestamp is appended to the input base name. For example:
+If no output path is supplied, the timestamp is appended to the input base name:
 
 ```text
 input.mp4 + --frame 83.500   -> input-83.500.jpg
 input.mp4 + --frame 1:23.500 -> input-1-23.500.jpg
 ```
 
+### Multiple frames
+
+Use `--frames START`, `--interval TIME`, and `--count N` together to capture a sequence of still frames.
+
+```sh
+./norm-vid --frames 10 --interval 5 --count 4 input.mp4
+```
+
+This captures frames at 10, 15, 20, and 25 seconds. With no output base supplied, the input basename is used:
+
+```text
+input-10.000.jpg
+input-15.000.jpg
+input-20.000.jpg
+input-25.000.jpg
+```
+
+The start time and interval both use the same `[[h:]m:]s[.ms]` syntax. The interval must be greater than zero, and `--count` must be a positive integer.
+
+An optional `OUTPUT` supplies the base name for the generated files. A `.jpg` or `.jpeg` suffix is treated as part of the base specification and removed before timestamp suffixes are added:
+
+```sh
+./norm-vid --frames 1:00 --interval 10 --count 3 input.mp4 shots.jpg
+```
+
+produces:
+
+```text
+shots-1-00.000.jpg
+shots-1-10.000.jpg
+shots-1-20.000.jpg
+```
+
+All target filenames are checked before capture starts. If any target already exists, no frames are created.
+
 ### JPEG quality
 
 JPEG quality defaults to `90`. Override it with `--jpeg-quality N`, where `N` is an integer from 1 through 100:
 
 ```sh
-./norm-vid --frame 1:23.500 --jpeg-quality 95 input.mp4 still.jpg
+./norm-vid --frames 10 --interval 5 --count 4 --jpeg-quality 95 input.mp4
 ```
 
 The user-facing 1–100 quality value is translated internally to ffmpeg's JPEG quality scale.
 
-`--jpeg-quality` is valid only with `--frame`.
+`--jpeg-quality` is valid with either `--frame` or `--frames`.
 
-Frame capture is a separate output mode. `--frame` cannot be combined with:
+Frame capture is a separate output mode. `--frame` and `--frames` cannot be combined with:
 
 - `--start` or `--end`
 - `--fps` or `--cfr`
 - MP4 metadata options
 
-Frame output must have a `.jpg` or `.jpeg` extension.
+`--frame` and `--frames` cannot be used together.
 
 ## Frame Rate
 
