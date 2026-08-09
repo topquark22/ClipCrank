@@ -12,6 +12,7 @@ fps=
 cfr=false
 clip_start=
 clip_end=
+clip_start_seconds=
 clip_duration=
 
 usage() {
@@ -33,8 +34,8 @@ Options:
   --comment TEXT           Set comment metadata
   --preserve-metadata      Preserve input global metadata before applying edits
   --clear-metadata         Clear input global metadata before applying edits
-  --start TIME             Start output at h:m:s[.ms]; defaults to input start
-  --end TIME               End output at h:m:s[.ms]; defaults to input end
+  --start TIME             Start output at [h:]m:s[.ms]; defaults to input start
+  --end TIME               End output at [h:]m:s[.ms]; defaults to input end
   --fps N                  Convert output video to frame rate N
   --cfr                    Force constant frame rate output; cannot be used with --fps
   -h, --help               Show this help text
@@ -43,9 +44,10 @@ Examples:
   $progname old-video.avi
   $progname input.mov output.mp4
   $progname --title "New Title" input.avi
-  $progname --start 0:01:12.500 input.mov clip.mp4
-  $progname --end 0:02:05 input.mov clip.mp4
-  $progname --start 0:01:12.500 --end 0:02:05 input.mov clip.mp4
+  $progname --start 1:12.500 input.mov clip.mp4
+  $progname --end 2:05 input.mov clip.mp4
+  $progname --start 1:12.500 --end 2:05 input.mov clip.mp4
+  $progname --start 1:03:04.250 --end 1:04:10.500 input.mov clip.mp4
   $progname --fps 30 input.mov
   $progname --cfr input.mov
 EOF
@@ -146,19 +148,29 @@ validate_timestamp() {
     value=$1
     name=$2
 
-    if [[ ! "$value" =~ ^[0-9]+:([0-5]?[0-9]):([0-5]?[0-9])(\.[0-9]{1,3})?$ ]]; then
-        error "$name must be in h:m:s[.ms] form"
-        exit 2
+    if [[ "$value" =~ ^[0-9]+:([0-5]?[0-9])(\.[0-9]{1,3})?$ ]]; then
+        return
     fi
+
+    if [[ "$value" =~ ^[0-9]+:([0-5]?[0-9]):([0-5]?[0-9])(\.[0-9]{1,3})?$ ]]; then
+        return
+    fi
+
+    error "$name must be in [h:]m:s[.ms] form"
+    exit 2
 }
 
 timestamp_to_seconds() {
-    awk -F: '{ printf "%.3f\n", ($1 * 3600) + ($2 * 60) + $3 }' <<< "$1"
+    awk -F: '
+        NF == 2 { printf "%.3f\n", ($1 * 60) + $2; next }
+        NF == 3 { printf "%.3f\n", ($1 * 3600) + ($2 * 60) + $3 }
+    ' <<< "$1"
 }
 
 validate_clip() {
     if [ -n "$clip_start" ]; then
         validate_timestamp "$clip_start" "start"
+        clip_start_seconds=$(timestamp_to_seconds "$clip_start")
     fi
 
     if [ -n "$clip_end" ]; then
@@ -172,12 +184,11 @@ validate_clip() {
     end_seconds=$(timestamp_to_seconds "$clip_end")
 
     if [ -n "$clip_start" ]; then
-        start_seconds=$(timestamp_to_seconds "$clip_start")
-        awk "BEGIN { exit !($end_seconds > $start_seconds) }" || {
+        awk "BEGIN { exit !($end_seconds > $clip_start_seconds) }" || {
             error "--end must be later than --start"
             exit 2
         }
-        clip_duration=$(awk "BEGIN { printf \"%.3f\", $end_seconds - $start_seconds }")
+        clip_duration=$(awk "BEGIN { printf \"%.3f\", $end_seconds - $clip_start_seconds }")
     else
         awk "BEGIN { exit !($end_seconds > 0) }" || {
             error "--end must be later than the start of the input"
@@ -363,8 +374,8 @@ EOF
     fi
 
     seek_args=()
-    if [ -n "$clip_start" ]; then
-        seek_args=( -ss "$clip_start" )
+    if [ -n "$clip_start_seconds" ]; then
+        seek_args=( -ss "$clip_start_seconds" )
     fi
 
     duration_args=()
