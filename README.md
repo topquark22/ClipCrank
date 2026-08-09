@@ -50,10 +50,11 @@ Examples:
 
 For normal video conversion, omitted `OUTPUT` is derived by replacing the input extension with `.mp4`.
 
-For frame capture, omitted `OUTPUT` becomes `<input-base>-frame.jpg`. For example:
+For frame capture, omitted `OUTPUT` includes the requested timestamp. Colons are replaced by hyphens so the filename remains portable. For example:
 
 ```text
-movie.mp4 -> movie-frame.jpg
+norm-vid --frame 1:23.500 movie.mp4
+movie.mp4 -> movie-1-23.500.jpg
 ```
 
 Existing output files are never overwritten.
@@ -97,7 +98,12 @@ Use `--frame TIME` to capture one still frame from the first video stream:
 
 `--frame` uses the same `[[h:]m:]s[.ms]` timestamp syntax as clipping.
 
-If no output path is supplied, the default is `<input-base>-frame.jpg`.
+If no output path is supplied, the timestamp is appended to the input base name. For example:
+
+```text
+input.mp4 + --frame 83.500   -> input-83.500.jpg
+input.mp4 + --frame 1:23.500 -> input-1-23.500.jpg
+```
 
 ### JPEG quality
 
