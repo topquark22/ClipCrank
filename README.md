@@ -22,7 +22,7 @@ The design goal is convenience without unnecessary complexity.
 - Encodes video as H.264
 - Encodes audio as AAC when audio exists
 - Automatically detects a usable H.264 encoder from the local `ffmpeg` environment
-- Can create a clip from an explicit start time to an explicit end time
+- Can create clips using an optional start time, end time, or both
 - Tolerates missing audio streams
 - Ignores subtitle and data streams
 - Scales output dimensions to even values for encoder compatibility
@@ -65,7 +65,8 @@ Examples:
 ./norm-vid old-video.avi
 ./norm-vid archive.flv
 ./norm-vid input.mov output.mp4
-./norm-vid --trim-seconds 0.04 input.mp4 output.mp4
+./norm-vid --start 0:01:12.500 input.mov clip.mp4
+./norm-vid --end 0:02:05 input.mov clip.mp4
 ./norm-vid --start 0:01:12.500 --end 0:02:05 input.mov clip.mp4
 ./norm-vid --fps 30 input.mov
 ./norm-vid --cfr input.mov
@@ -83,7 +84,7 @@ Existing MP4 inputs are also fully normalized and regenerated through the same c
 
 ## Video Clips
 
-Use `--start TIME` and `--end TIME` together to create an output containing only that portion of the original video.
+Use `--start TIME`, `--end TIME`, or both to create an output containing only part of the original video.
 
 Times use the form:
 
@@ -93,18 +94,25 @@ h:m:s[.ms]
 
 Hours may be any non-negative integer. Minutes and seconds must be between 0 and 59. The optional fractional part may contain one to three digits.
 
-Examples:
+`--start` specifies where the output begins. If `--end` is omitted, the output continues to the end of the input.
 
 ```sh
-./norm-vid --start 0:01:12 --end 0:02:05 input.mov clip.mp4
+./norm-vid --start 0:01:12.500 input.mov clip.mp4
+```
+
+`--end` specifies where the output ends. If `--start` is omitted, the output begins at the start of the input.
+
+```sh
+./norm-vid --end 0:02:05 input.mov clip.mp4
+```
+
+When both are supplied, the output contains the interval between the two positions:
+
+```sh
 ./norm-vid --start 1:03:04.250 --end 1:04:10.500 input.mov clip.mp4
 ```
 
-The start and end times are positions in the original input. The end time must be later than the start time.
-
-`--start` and `--end` must always be supplied together. They cannot be combined with `--trim-seconds`.
-
-The clip is still fully normalized through the usual H.264/AAC conversion pipeline.
+When both are supplied, the end time must be later than the start time. The clip is still fully normalized through the usual H.264/AAC conversion pipeline.
 
 ## Frame Rate
 
@@ -120,30 +128,6 @@ Examples:
 ./norm-vid --fps 30 input.mov output.mp4
 ./norm-vid --cfr input.mov output.mp4
 ```
-
-## Trim Seconds
-
-The `--trim-seconds` option trims a small amount from the beginning of the media during conversion.
-
-Example:
-
-```sh
-./norm-vid --trim-seconds 0.04 input.mp4 output.mp4
-```
-
-This can be useful when:
-
-- removing problematic leading frames
-- slightly shifting media timing during normalization
-- regenerating output that differs from the original timing structure
-
-The value is specified in seconds and may be fractional.
-
-Examples:
-
-- `0.04`
-- `0.0333`
-- `1.5`
 
 ## What the Script Does
 
