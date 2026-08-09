@@ -69,11 +69,16 @@ derive_video_output_path() {
     esac
 }
 
+sanitize_timestamp_for_filename() {
+    printf '%s' "$1" | tr ':' '-'
+}
+
 derive_frame_output_path() {
     input=$1
+    timestamp=$(sanitize_timestamp_for_filename "$frame_time")
     case "$input" in
-        *.*) printf '%s\n' "${input%.*}-frame.jpg" ;;
-        *)   printf '%s\n' "${input}-frame.jpg" ;;
+        *.*) printf '%s\n' "${input%.*}-${timestamp}.jpg" ;;
+        *)   printf '%s\n' "${input}-${timestamp}.jpg" ;;
     esac
 }
 
@@ -199,7 +204,7 @@ video_encoder_args() {
     case "$1" in
         libx264) printf '%s\n' -c:v libx264 -preset medium -crf 23 ;;
         libopenh264) printf '%s\n' -c:v libopenh264 -b:v 5000k ;;
-        h264_nvenc|h264_qsv|h264_amf|h264_mf|h264_d3d12va|h264_vulkan|h264_videotoolbox) printf '%s\n' -c:v "$1" -b:v 5000k ;;
+        h264_nvenc|h264_qsv|h264_amf|h264_mf|h264_d3d12va|h264_videotoolbox) printf '%s\n' -c:v "$1" -b:v 5000k ;;
         *) error "unsupported encoder selection: $1"; return 1 ;;
     esac
 }
