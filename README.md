@@ -65,7 +65,7 @@ Examples:
 ./norm-vid old-video.avi
 ./norm-vid archive.flv
 ./norm-vid input.mov output.mp4
-./norm-vid --start 1:12.500 input.mov clip.mp4
+./norm-vid --start 12.500 input.mov clip.mp4
 ./norm-vid --end 2:05 input.mov clip.mp4
 ./norm-vid --start 1:12.500 --end 2:05 input.mov clip.mp4
 ./norm-vid --start 1:03:04.250 --end 1:04:10.500 input.mov clip.mp4
@@ -87,18 +87,26 @@ Existing MP4 inputs are also fully normalized and regenerated through the same c
 
 Use `--start TIME`, `--end TIME`, or both to create an output containing only part of the original video.
 
-Times may use either form:
+The general time form is:
 
 ```text
+[[h:]m:]s[.ms]
+```
+
+This means all three of these forms are accepted:
+
+```text
+s[.ms]
 m:s[.ms]
 h:m:s[.ms]
 ```
 
-If the hours field is omitted, it defaults to zero. Hours and minutes may be non-negative integers as appropriate to the form; seconds must be between 0 and 59. In the three-field form, the minutes field must also be between 0 and 59. The optional fractional part may contain one to three digits.
+If minutes are omitted, they default to zero. If hours are omitted, they also default to zero. The seconds-only field may be any non-negative number of seconds. In the two-field form, seconds must be between 0 and 59. In the three-field form, both minutes and seconds must be between 0 and 59. The optional fractional part may contain one to three digits.
 
 Examples of equivalent times:
 
 ```text
+72.500
 1:12.500
 0:01:12.500
 ```
@@ -106,19 +114,19 @@ Examples of equivalent times:
 `--start` specifies where the output begins. If `--end` is omitted, the output continues to the end of the input.
 
 ```sh
-./norm-vid --start 1:12.500 input.mov clip.mp4
+./norm-vid --start 12.500 input.mov clip.mp4
 ```
 
 `--end` specifies where the output ends. If `--start` is omitted, the output begins at the start of the input.
 
 ```sh
-./norm-vid --end 2:05 input.mov clip.mp4
+./norm-vid --end 125 input.mov clip.mp4
 ```
 
 When both are supplied, the output contains the interval between the two positions:
 
 ```sh
-./norm-vid --start 1:12.500 --end 2:05 input.mov clip.mp4
+./norm-vid --start 72.500 --end 2:05 input.mov clip.mp4
 ```
 
 Longer timestamps may still include hours explicitly:
