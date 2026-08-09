@@ -78,12 +78,6 @@ If hours are omitted, they default to zero. In the two-field form, minutes may e
 ### Start and end, abbreviated form
 
 ```sh
-./norm-vid --start 10.250:00 --end 20.750:00 input.mp4 clip.mp4
-```
-
-Use the correct practical form instead:
-
-```sh
 ./norm-vid --start 0:10.250 --end 0:20.750 input.mp4 clip.mp4
 ```
 
