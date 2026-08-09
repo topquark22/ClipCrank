@@ -14,16 +14,20 @@ clip_start=
 clip_end=
 clip_start_seconds=
 clip_duration=
+frame_time=
+frame_seconds=
+jpeg_quality=90
+jpeg_quality_set=false
 
 usage() {
     cat <<EOF
 Usage: $progname [OPTIONS] INPUT [OUTPUT]
 
-Convert INPUT video into a standardized H.264/AAC MP4 file.
+Convert INPUT video into a standardized H.264/AAC MP4 file, or capture a JPEG frame.
 
 Arguments:
   INPUT                    Path to input video file
-  OUTPUT                   Optional output .mp4 path
+  OUTPUT                   Optional output path
 
 Options:
   --metadata KEY=VALUE     Set an MP4 metadata field; may be repeated
@@ -36,6 +40,8 @@ Options:
   --clear-metadata         Clear input global metadata before applying edits
   --start TIME             Start output at [[h:]m:]s[.ms]; defaults to input start
   --end TIME               End output at [[h:]m:]s[.ms]; defaults to input end
+  --frame TIME             Capture one JPEG frame at [[h:]m:]s[.ms]
+  --jpeg-quality N         JPEG quality from 1 to 100; default 90
   --fps N                  Convert output video to frame rate N
   --cfr                    Force constant frame rate output; cannot be used with --fps
   -h, --help               Show this help text
@@ -43,457 +49,234 @@ Options:
 Examples:
   $progname old-video.avi
   $progname input.mov output.mp4
-  $progname --title "New Title" input.avi
-  $progname --start 12.500 input.mov clip.mp4
-  $progname --end 2:05 input.mov clip.mp4
-  $progname --start 1:12.500 --end 2:05 input.mov clip.mp4
-  $progname --start 1:03:04.250 --end 1:04:10.500 input.mov clip.mp4
+  $progname --start 12.500 --end 2:05 input.mov clip.mp4
+  $progname --frame 1:23.500 input.mp4
+  $progname --frame 1:23.500 --jpeg-quality 95 input.mp4 still.jpg
   $progname --fps 30 input.mov
   $progname --cfr input.mov
 EOF
 }
 
-error() {
-    printf '%s: %s\n' "$progname" "$*" >&2
-}
+error() { printf '%s: %s\n' "$progname" "$*" >&2; }
+info() { printf '%s: %s\n' "$progname" "$*"; }
+have_command() { command -v "$1" >/dev/null 2>&1; }
 
-info() {
-    printf '%s: %s\n' "$progname" "$*"
-}
-
-have_command() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-derive_output_path() {
+derive_video_output_path() {
     input=$1
-
     case "$input" in
         *.*) printf '%s\n' "${input%.*}.mp4" ;;
         *)   printf '%s\n' "${input}.mp4" ;;
     esac
 }
 
-add_metadata() {
-    key=$1
-    value=$2
-
-    metadata_args+=( -metadata "$key=$value" )
+derive_frame_output_path() {
+    input=$1
+    case "$input" in
+        *.*) printf '%s\n' "${input%.*}-frame.jpg" ;;
+        *)   printf '%s\n' "${input}-frame.jpg" ;;
+    esac
 }
 
+add_metadata() { metadata_args+=( -metadata "$1=$2" ); }
 add_metadata_pair() {
-    pair=$1
-
-    case "$pair" in
-        *=*) metadata_args+=( -metadata "$pair" ) ;;
-        *)
-            error "metadata must be in KEY=VALUE form: $pair"
-            exit 2
-            ;;
+    case "$1" in
+        *=*) metadata_args+=( -metadata "$1" ) ;;
+        *) error "metadata must be in KEY=VALUE form: $1"; exit 2 ;;
     esac
 }
 
 require_option_value() {
-    option=$1
-    remaining=$2
-
-    if [ "$remaining" -lt 2 ]; then
-        error "$option requires a value"
-        exit 2
-    fi
+    if [ "$2" -lt 2 ]; then error "$1 requires a value"; exit 2; fi
 }
-
-reject_equals_option() {
-    option=$1
-
-    error "use '$option VALUE', not '$option=VALUE'"
-    exit 2
-}
+reject_equals_option() { error "use '$1 VALUE', not '$1=VALUE'"; exit 2; }
 
 set_metadata_option() {
-    option=$1
-    value=$2
-
-    case "$option" in
-        --title)   add_metadata title "$value" ;;
-        --artist)  add_metadata artist "$value" ;;
-        --album)   add_metadata album "$value" ;;
-        --date)    add_metadata date "$value" ;;
-        --comment) add_metadata comment "$value" ;;
-        *)
-            error "internal parser error for metadata option: $option"
-            exit 2
-            ;;
+    case "$1" in
+        --title) add_metadata title "$2" ;;
+        --artist) add_metadata artist "$2" ;;
+        --album) add_metadata album "$2" ;;
+        --date) add_metadata date "$2" ;;
+        --comment) add_metadata comment "$2" ;;
+        *) error "internal parser error for metadata option: $1"; exit 2 ;;
     esac
 }
 
 validate_positive_number() {
-    value=$1
-    name=$2
+    value=$1; name=$2
+    case "$value" in ''|*[!0-9.]*|*.*.*) error "$name must be a positive number"; exit 2 ;; esac
+    awk "BEGIN { exit !($value > 0) }" || { error "$name must be greater than zero"; exit 2; }
+}
 
-    case "$value" in
-        ''|*[!0-9.]*|*.*.*)
-            error "$name must be a positive number"
-            exit 2
-            ;;
-    esac
-
-    awk "BEGIN { exit !($value > 0) }" || {
-        error "$name must be greater than zero"
+validate_jpeg_quality() {
+    case "$jpeg_quality" in ''|*[!0-9]*) error "jpeg-quality must be an integer from 1 to 100"; exit 2 ;; esac
+    if [ "$jpeg_quality" -lt 1 ] || [ "$jpeg_quality" -gt 100 ]; then
+        error "jpeg-quality must be an integer from 1 to 100"
         exit 2
-    }
+    fi
 }
 
 validate_timestamp() {
-    value=$1
-    name=$2
-
-    if [[ "$value" =~ ^[0-9]+(\.[0-9]{1,3})?$ ]]; then
-        return
-    fi
-
-    if [[ "$value" =~ ^[0-9]+:([0-5]?[0-9])(\.[0-9]{1,3})?$ ]]; then
-        return
-    fi
-
-    if [[ "$value" =~ ^[0-9]+:([0-5]?[0-9]):([0-5]?[0-9])(\.[0-9]{1,3})?$ ]]; then
-        return
-    fi
-
+    value=$1; name=$2
+    [[ "$value" =~ ^[0-9]+(\.[0-9]{1,3})?$ ]] && return
+    [[ "$value" =~ ^[0-9]+:([0-5]?[0-9])(\.[0-9]{1,3})?$ ]] && return
+    [[ "$value" =~ ^[0-9]+:([0-5]?[0-9]):([0-5]?[0-9])(\.[0-9]{1,3})?$ ]] && return
     error "$name must be in [[h:]m:]s[.ms] form"
     exit 2
 }
 
 timestamp_to_seconds() {
-    awk -F: '
-        NF == 1 { printf "%.3f\n", $1; next }
-        NF == 2 { printf "%.3f\n", ($1 * 60) + $2; next }
-        NF == 3 { printf "%.3f\n", ($1 * 3600) + ($2 * 60) + $3 }
-    ' <<< "$1"
+    awk -F: 'NF == 1 {printf "%.3f\n",$1;next} NF == 2 {printf "%.3f\n",($1*60)+$2;next} NF == 3 {printf "%.3f\n",($1*3600)+($2*60)+$3}' <<< "$1"
 }
 
 validate_clip() {
+    if [ -n "$clip_start" ]; then validate_timestamp "$clip_start" start; clip_start_seconds=$(timestamp_to_seconds "$clip_start"); fi
+    if [ -n "$clip_end" ]; then validate_timestamp "$clip_end" end; fi
+    [ -z "$clip_end" ] && return
+    end_seconds=$(timestamp_to_seconds "$clip_end")
     if [ -n "$clip_start" ]; then
-        validate_timestamp "$clip_start" "start"
-        clip_start_seconds=$(timestamp_to_seconds "$clip_start")
+        awk "BEGIN {exit !($end_seconds > $clip_start_seconds)}" || { error "--end must be later than --start"; exit 2; }
+        clip_duration=$(awk "BEGIN {printf \"%.3f\",$end_seconds-$clip_start_seconds}")
+    else
+        awk "BEGIN {exit !($end_seconds > 0)}" || { error "--end must be later than the start of the input"; exit 2; }
+        clip_duration=$end_seconds
     fi
+}
 
-    if [ -n "$clip_end" ]; then
-        validate_timestamp "$clip_end" "end"
-    fi
-
-    if [ -z "$clip_end" ]; then
+validate_frame_mode() {
+    if [ -z "$frame_time" ]; then
+        if [ "$jpeg_quality_set" = true ]; then error "--jpeg-quality requires --frame"; exit 2; fi
         return
     fi
-
-    end_seconds=$(timestamp_to_seconds "$clip_end")
-
-    if [ -n "$clip_start" ]; then
-        awk "BEGIN { exit !($end_seconds > $clip_start_seconds) }" || {
-            error "--end must be later than --start"
-            exit 2
-        }
-        clip_duration=$(awk "BEGIN { printf \"%.3f\", $end_seconds - $clip_start_seconds }")
-    else
-        awk "BEGIN { exit !($end_seconds > 0) }" || {
-            error "--end must be later than the start of the input"
-            exit 2
-        }
-        clip_duration=$end_seconds
+    validate_timestamp "$frame_time" frame
+    frame_seconds=$(timestamp_to_seconds "$frame_time")
+    validate_jpeg_quality
+    if [ -n "$clip_start" ] || [ -n "$clip_end" ]; then error "--frame cannot be used with --start or --end"; exit 2; fi
+    if [ -n "$fps" ] || [ "$cfr" = true ]; then error "--frame cannot be used with --fps or --cfr"; exit 2; fi
+    if [ "$preserve_metadata" = true ] || [ "$clear_metadata" = true ] || [ "${#metadata_args[@]}" -gt 0 ]; then
+        error "--frame cannot be used with metadata options"
+        exit 2
     fi
 }
 
 parse_args() {
     while [ "$#" -gt 0 ]; do
         case "$1" in
-            -h|--help)
-                usage
-                exit 0
-                ;;
-            --*=*)
-                reject_equals_option "${1%%=*}"
-                ;;
-            --metadata)
-                require_option_value "$1" "$#"
-                add_metadata_pair "$2"
-                shift 2
-                ;;
-            --title|--artist|--album|--date|--comment)
-                require_option_value "$1" "$#"
-                set_metadata_option "$1" "$2"
-                shift 2
-                ;;
-            --preserve-metadata)
-                preserve_metadata=true
-                shift
-                ;;
-            --clear-metadata)
-                clear_metadata=true
-                shift
-                ;;
-            --start)
-                require_option_value "$1" "$#"
-                clip_start=$2
-                shift 2
-                ;;
-            --end)
-                require_option_value "$1" "$#"
-                clip_end=$2
-                shift 2
-                ;;
-            --fps)
-                require_option_value "$1" "$#"
-                fps=$2
-                shift 2
-                ;;
-            --cfr)
-                cfr=true
-                shift
-                ;;
-            --)
-                shift
-                while [ "$#" -gt 0 ]; do
-                    positional_args+=( "$1" )
-                    shift
-                done
-                ;;
-            --*)
-                error "unknown option: $1"
-                usage >&2
-                exit 2
-                ;;
-            *)
-                positional_args+=( "$1" )
-                shift
-                ;;
+            -h|--help) usage; exit 0 ;;
+            --*=*) reject_equals_option "${1%%=*}" ;;
+            --metadata) require_option_value "$1" "$#"; add_metadata_pair "$2"; shift 2 ;;
+            --title|--artist|--album|--date|--comment) require_option_value "$1" "$#"; set_metadata_option "$1" "$2"; shift 2 ;;
+            --preserve-metadata) preserve_metadata=true; shift ;;
+            --clear-metadata) clear_metadata=true; shift ;;
+            --start) require_option_value "$1" "$#"; clip_start=$2; shift 2 ;;
+            --end) require_option_value "$1" "$#"; clip_end=$2; shift 2 ;;
+            --frame) require_option_value "$1" "$#"; frame_time=$2; shift 2 ;;
+            --jpeg-quality) require_option_value "$1" "$#"; jpeg_quality=$2; jpeg_quality_set=true; shift 2 ;;
+            --fps) require_option_value "$1" "$#"; fps=$2; shift 2 ;;
+            --cfr) cfr=true; shift ;;
+            --) shift; while [ "$#" -gt 0 ]; do positional_args+=( "$1" ); shift; done ;;
+            --*) error "unknown option: $1"; usage >&2; exit 2 ;;
+            *) positional_args+=( "$1" ); shift ;;
         esac
     done
 
-    if [ "$preserve_metadata" = true ] && [ "$clear_metadata" = true ]; then
-        error "--preserve-metadata and --clear-metadata cannot be used together"
-        exit 2
-    fi
-
-    if [ -n "$fps" ] && [ "$cfr" = true ]; then
-        error "--fps and --cfr cannot be used together"
-        exit 2
-    fi
-
-    if [ -n "$fps" ]; then
-        validate_positive_number "$fps" "fps"
-    fi
-
+    if [ "$preserve_metadata" = true ] && [ "$clear_metadata" = true ]; then error "--preserve-metadata and --clear-metadata cannot be used together"; exit 2; fi
+    if [ -n "$fps" ] && [ "$cfr" = true ]; then error "--fps and --cfr cannot be used together"; exit 2; fi
+    if [ -n "$fps" ]; then validate_positive_number "$fps" fps; fi
     validate_clip
+    validate_frame_mode
 }
 
-have_encoder() {
-    encoder=$1
-    ffmpeg -hide_banner -encoders 2>/dev/null | awk '{print $2}' | grep -Fx "$encoder" >/dev/null 2>&1
-}
-
+have_encoder() { ffmpeg -hide_banner -encoders 2>/dev/null | awk '{print $2}' | grep -Fx "$1" >/dev/null 2>&1; }
 select_video_encoder() {
-    for encoder in \
-        libx264 \
-        libopenh264 \
-        h264_nvenc \
-        h264_qsv \
-        h264_amf \
-        h264_mf \
-        h264_d3d12va \
-        h264_vulkan \
-        h264_videotoolbox
-    do
-        if have_encoder "$encoder"; then
-            printf '%s\n' "$encoder"
-            return 0
-        fi
+    for encoder in libx264 libopenh264 h264_nvenc h264_qsv h264_amf h264_mf h264_d3d12va h264_vulkan h264_videotoolbox; do
+        if have_encoder "$encoder"; then printf '%s\n' "$encoder"; return 0; fi
     done
-
     return 1
 }
-
-have_aac_encoder() {
-    have_encoder aac
-}
+have_aac_encoder() { have_encoder aac; }
 
 video_encoder_args() {
-    encoder=$1
-
-    case "$encoder" in
-        libx264)
-            printf '%s\n' \
-                -c:v libx264 \
-                -preset medium \
-                -crf 23
-            ;;
-        libopenh264)
-            printf '%s\n' \
-                -c:v libopenh264 \
-                -b:v 5000k
-            ;;
-        h264_nvenc|h264_qsv|h264_amf|h264_mf|h264_d3d12va|h264_videotoolbox)
-            printf '%s\n' \
-                -c:v "$encoder" \
-                -b:v 5000k
-            ;;
-        *)
-            error "unsupported encoder selection: $encoder"
-            return 1
-            ;;
+    case "$1" in
+        libx264) printf '%s\n' -c:v libx264 -preset medium -crf 23 ;;
+        libopenh264) printf '%s\n' -c:v libopenh264 -b:v 5000k ;;
+        h264_nvenc|h264_qsv|h264_amf|h264_mf|h264_d3d12va|h264_vulkan|h264_videotoolbox) printf '%s\n' -c:v "$1" -b:v 5000k ;;
+        *) error "unsupported encoder selection: $1"; return 1 ;;
     esac
 }
 
 build_video_filters() {
     filters=( "scale=trunc(iw/2)*2:trunc(ih/2)*2" )
+    if [ -n "$fps" ]; then filters+=( "fps=$fps" ); fi
+    IFS=,; printf '%s\n' "${filters[*]}"
+}
 
-    if [ -n "$fps" ]; then
-        filters+=( "fps=$fps" )
-    fi
+jpeg_qscale() {
+    awk "BEGIN { printf \"%d\", 31 - (($jpeg_quality - 1) * 29 / 99) }"
+}
 
-    IFS=,
-    printf '%s\n' "${filters[*]}"
+run_ffmpeg_frame() {
+    input=$1; tmp_output=$2
+    ffmpeg -hide_banner -loglevel error -y \
+        -ss "$frame_seconds" -i "$input" \
+        -map 0:v:0 -frames:v 1 -q:v "$(jpeg_qscale)" \
+        -f image2 "$tmp_output"
 }
 
 run_ffmpeg() {
-    encoder=$1
-    input=$2
-    tmp_output=$3
-
-    encoder_args=()
-    while IFS= read -r arg; do
-        encoder_args+=( "$arg" )
-    done <<EOF
+    encoder=$1; input=$2; tmp_output=$3
+    encoder_args=(); while IFS= read -r arg; do encoder_args+=( "$arg" ); done <<EOF
 $(video_encoder_args "$encoder")
 EOF
-
     metadata_mode_args=()
-    if [ "$clear_metadata" = true ]; then
-        metadata_mode_args=( -map_metadata -1 )
-    elif [ "$preserve_metadata" = true ]; then
-        metadata_mode_args=( -map_metadata 0 )
-    fi
-
-    cfr_args=()
-    if [ "$cfr" = true ]; then
-        cfr_args=( -vsync cfr )
-    fi
-
-    seek_args=()
-    if [ -n "$clip_start_seconds" ]; then
-        seek_args=( -ss "$clip_start_seconds" )
-    fi
-
-    duration_args=()
-    if [ -n "$clip_duration" ]; then
-        duration_args=( -t "$clip_duration" )
-    fi
-
-    ffmpeg \
-        -hide_banner \
-        -loglevel error \
-        -y \
-        -fflags +genpts \
-        "${seek_args[@]}" \
-        -i "$input" \
-        "${duration_args[@]}" \
-        -map 0:v:0 \
-        -map 0:a? \
-        -dn \
-        -sn \
-        "${cfr_args[@]}" \
-        "${metadata_mode_args[@]}" \
-        "${metadata_args[@]}" \
-        "${encoder_args[@]}" \
-        -pix_fmt yuv420p \
-        -vf "$(build_video_filters)" \
-        -movflags +faststart \
-        -c:a aac \
-        -b:a 192k \
-        -f mp4 \
-        "$tmp_output"
+    if [ "$clear_metadata" = true ]; then metadata_mode_args=( -map_metadata -1 ); elif [ "$preserve_metadata" = true ]; then metadata_mode_args=( -map_metadata 0 ); fi
+    cfr_args=(); if [ "$cfr" = true ]; then cfr_args=( -vsync cfr ); fi
+    seek_args=(); if [ -n "$clip_start_seconds" ]; then seek_args=( -ss "$clip_start_seconds" ); fi
+    duration_args=(); if [ -n "$clip_duration" ]; then duration_args=( -t "$clip_duration" ); fi
+    ffmpeg -hide_banner -loglevel error -y -fflags +genpts \
+        "${seek_args[@]}" -i "$input" "${duration_args[@]}" \
+        -map 0:v:0 -map 0:a? -dn -sn \
+        "${cfr_args[@]}" "${metadata_mode_args[@]}" "${metadata_args[@]}" \
+        "${encoder_args[@]}" -pix_fmt yuv420p -vf "$(build_video_filters)" \
+        -movflags +faststart -c:a aac -b:a 192k -f mp4 "$tmp_output"
 }
 
 parse_args "$@"
-
-if [ "${#positional_args[@]}" -lt 1 ] || [ "${#positional_args[@]}" -gt 2 ]; then
-    usage >&2
-    exit 2
-fi
-
+if [ "${#positional_args[@]}" -lt 1 ] || [ "${#positional_args[@]}" -gt 2 ]; then usage >&2; exit 2; fi
 input=${positional_args[0]}
-output=${positional_args[1]:-$(derive_output_path "$input")}
+if [ -n "$frame_time" ]; then output=${positional_args[1]:-$(derive_frame_output_path "$input")}; else output=${positional_args[1]:-$(derive_video_output_path "$input")}; fi
 
-if ! have_command ffmpeg; then
-    error "ffmpeg is not installed or not on PATH"
-    exit 127
-fi
+if ! have_command ffmpeg; then error "ffmpeg is not installed or not on PATH"; exit 127; fi
+if [ ! -e "$input" ]; then error "input file not found: $input"; exit 1; fi
+if [ ! -f "$input" ]; then error "input path is not a regular file: $input"; exit 1; fi
+if [ ! -r "$input" ]; then error "input file is not readable: $input"; exit 1; fi
+if [ "$input" = "$output" ]; then error "input and output paths must be different"; exit 1; fi
+if [ -e "$output" ]; then error "output file already exists: $output"; exit 1; fi
 
-if [ ! -e "$input" ]; then
-    error "input file not found: $input"
-    exit 1
-fi
-
-if [ ! -f "$input" ]; then
-    error "input path is not a regular file: $input"
-    exit 1
-fi
-
-if [ ! -r "$input" ]; then
-    error "input file is not readable: $input"
-    exit 1
-fi
-
-if [ "$input" = "$output" ]; then
-    error "input and output paths must be different"
-    exit 1
-fi
-
-if [ -e "$output" ]; then
-    error "output file already exists: $output"
-    exit 1
-fi
-
-if ! have_aac_encoder; then
-    error "AAC encoder not found in ffmpeg"
-    exit 1
-fi
-
-case "$output" in
-    *.mp4) tmp_output="${output%.mp4}.part.mp4" ;;
-    *)     tmp_output="${output}.part.mp4" ;;
-esac
-
-if ! video_encoder=$(select_video_encoder); then
-    error "no supported H.264 encoder found in ffmpeg"
-    error "tried: libx264, libopenh264, h264_nvenc, h264_qsv, h264_amf, h264_mf, h264_d3d12va, h264_vulkan, h264_videotoolbox"
-    exit 1
-fi
-
-info "using video encoder: $video_encoder"
-
-if [ -n "$clip_start" ] && [ -n "$clip_end" ]; then
-    info "creating clip from $clip_start to $clip_end"
-elif [ -n "$clip_start" ]; then
-    info "creating clip from $clip_start to end of input"
-elif [ -n "$clip_end" ]; then
-    info "creating clip from start of input to $clip_end"
-fi
-
-cleanup() {
-    if [ -e "$tmp_output" ]; then
-        rm -f "$tmp_output"
+if [ -n "$frame_time" ]; then
+    case "$output" in *.jpg|*.jpeg) ;; *) error "frame output must use .jpg or .jpeg"; exit 2 ;; esac
+    case "$output" in *.jpg) tmp_output="${output%.jpg}.part.jpg" ;; *.jpeg) tmp_output="${output%.jpeg}.part.jpeg" ;; esac
+    info "capturing frame at $frame_time with JPEG quality $jpeg_quality"
+else
+    if ! have_aac_encoder; then error "AAC encoder not found in ffmpeg"; exit 1; fi
+    case "$output" in *.mp4) tmp_output="${output%.mp4}.part.mp4" ;; *) tmp_output="${output}.part.mp4" ;; esac
+    if ! video_encoder=$(select_video_encoder); then
+        error "no supported H.264 encoder found in ffmpeg"
+        error "tried: libx264, libopenh264, h264_nvenc, h264_qsv, h264_amf, h264_mf, h264_d3d12va, h264_vulkan, h264_videotoolbox"
+        exit 1
     fi
-}
+    info "using video encoder: $video_encoder"
+    if [ -n "$clip_start" ] && [ -n "$clip_end" ]; then info "creating clip from $clip_start to $clip_end"; elif [ -n "$clip_start" ]; then info "creating clip from $clip_start to end of input"; elif [ -n "$clip_end" ]; then info "creating clip from start of input to $clip_end"; fi
+fi
 
+cleanup() { if [ -e "$tmp_output" ]; then rm -f "$tmp_output"; fi; }
 trap cleanup EXIT INT TERM HUP
 
-if ! run_ffmpeg "$video_encoder" "$input" "$tmp_output"; then
-    error "conversion failed"
-    exit 1
+if [ -n "$frame_time" ]; then
+    if ! run_ffmpeg_frame "$input" "$tmp_output"; then error "frame capture failed"; exit 1; fi
+else
+    if ! run_ffmpeg "$video_encoder" "$input" "$tmp_output"; then error "conversion failed"; exit 1; fi
 fi
 
 mv -- "$tmp_output" "$output"
-
 trap - EXIT INT TERM HUP
-
 printf 'created: %s\n' "$output"
