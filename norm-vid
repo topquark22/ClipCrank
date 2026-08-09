@@ -17,8 +17,6 @@ clip_start_seconds=
 clip_duration=
 frame_time=
 frame_seconds=
-frames_start=
-frames_start_seconds=
 frame_interval=
 frame_interval_seconds=
 frame_count=
@@ -47,10 +45,9 @@ Options:
   --clear-metadata         Clear input global metadata before applying edits
   --start TIME             Start output at [[h:]m:]s[.ms]; defaults to input start
   --end TIME               End output at [[h:]m:]s[.ms]; defaults to input end
-  --frame TIME             Capture one JPEG frame at [[h:]m:]s[.ms]
-  --frames TIME            Capture multiple JPEG frames starting at TIME
-  --interval TIME          Interval between frames; requires --frames
-  --count N                Number of frames to capture; requires --frames
+  --frame TIME             Capture JPEG frame(s) starting at [[h:]m:]s[.ms]
+  --interval TIME          Interval between frames; requires --frame and --count
+  --count N                Number of frames to capture; requires --frame and --interval
   --jpeg-quality N         JPEG quality from 1 to 100; default 90
   --fps N                  Convert output video to frame rate N
   --cfr                    Force constant frame rate output; cannot be used with --fps
@@ -61,8 +58,8 @@ Examples:
   $progname -f input.mov output.mp4
   $progname --start 12.500 --end 2:05 input.mov clip.mp4
   $progname --frame 1:23.500 input.mp4
-  $progname --frames 10 --interval 5 --count 4 input.mp4
-  $progname --force --frames 1:00 --interval 10 --count 3 input.mp4 shots.jpg
+  $progname --frame 10 --interval 5 --count 4 input.mp4
+  $progname --force --frame 1:00 --interval 10 --count 3 input.mp4 shots.jpg
 EOF
 }
 
@@ -247,30 +244,32 @@ validate_clip() {
 }
 
 validate_frame_modes() {
-    if [ -n "$frame_time" ] && [ -n "$frames_start" ]; then
-        error "--frame and --frames cannot be used together"
-        exit 2
-    fi
-
-    if [ -z "$frames_start" ]; then
+    if [ -z "$frame_time" ]; then
         if [ -n "$frame_interval" ]; then
-            error "--interval requires --frames"
+            error "--interval requires --frame"
             exit 2
         fi
         if [ -n "$frame_count" ]; then
-            error "--count requires --frames"
+            error "--count requires --frame"
             exit 2
         fi
-    else
-        validate_timestamp "$frames_start" frames
-        frames_start_seconds=$(timestamp_to_seconds "$frames_start")
+        if [ "$jpeg_quality_set" = true ]; then
+            error "--jpeg-quality requires --frame"
+            exit 2
+        fi
+        return
+    fi
 
+    validate_timestamp "$frame_time" frame
+    frame_seconds=$(timestamp_to_seconds "$frame_time")
+
+    if [ -n "$frame_interval" ] || [ -n "$frame_count" ]; then
         if [ -z "$frame_interval" ]; then
-            error "--frames requires --interval"
+            error "--count requires --interval"
             exit 2
         fi
         if [ -z "$frame_count" ]; then
-            error "--frames requires --count"
+            error "--interval requires --count"
             exit 2
         fi
 
@@ -281,19 +280,6 @@ validate_frame_modes() {
             exit 2
         }
         validate_positive_integer "$frame_count" count
-    fi
-
-    if [ -n "$frame_time" ]; then
-        validate_timestamp "$frame_time" frame
-        frame_seconds=$(timestamp_to_seconds "$frame_time")
-    fi
-
-    if [ -z "$frame_time" ] && [ -z "$frames_start" ]; then
-        if [ "$jpeg_quality_set" = true ]; then
-            error "--jpeg-quality requires --frame or --frames"
-            exit 2
-        fi
-        return
     fi
 
     validate_jpeg_quality
@@ -359,11 +345,6 @@ parse_args() {
             --frame)
                 require_option_value "$1" "$#"
                 frame_time=$2
-                shift 2
-                ;;
-            --frames)
-                require_option_value "$1" "$#"
-                frames_start=$2
                 shift 2
                 ;;
             --interval)
@@ -534,231 +515,3 @@ EOF
 
     seek_args=()
     if [ -n "$clip_start_seconds" ]; then
-        seek_args=( -ss "$clip_start_seconds" )
-    fi
-
-    duration_args=()
-    if [ -n "$clip_duration" ]; then
-        duration_args=( -t "$clip_duration" )
-    fi
-
-    ffmpeg \
-        -hide_banner \
-        -loglevel error \
-        -y \
-        -fflags +genpts \
-        "${seek_args[@]}" \
-        -i "$input" \
-        "${duration_args[@]}" \
-        -map 0:v:0 \
-        -map 0:a? \
-        -dn \
-        -sn \
-        "${cfr_args[@]}" \
-        "${metadata_mode_args[@]}" \
-        "${metadata_args[@]}" \
-        "${encoder_args[@]}" \
-        -pix_fmt yuv420p \
-        -vf "$(build_video_filters)" \
-        -movflags +faststart \
-        -c:a aac \
-        -b:a 192k \
-        -f mp4 \
-        "$tmp_output"
-}
-
-multi_frame_output_base() {
-    input=$1
-    requested=${2:-}
-
-    if [ -n "$requested" ]; then
-        case "$requested" in
-            *.jpg)  printf '%s\n' "${requested%.jpg}" ;;
-            *.jpeg) printf '%s\n' "${requested%.jpeg}" ;;
-            *)      printf '%s\n' "$requested" ;;
-        esac
-    else
-        case "$input" in
-            *.*) printf '%s\n' "${input%.*}" ;;
-            *)   printf '%s\n' "$input" ;;
-        esac
-    fi
-}
-
-parse_args "$@"
-
-if [ "${#positional_args[@]}" -lt 1 ] || [ "${#positional_args[@]}" -gt 2 ]; then
-    usage >&2
-    exit 2
-fi
-
-input=${positional_args[0]}
-requested_output=${positional_args[1]:-}
-
-if ! have_command ffmpeg; then
-    error "ffmpeg is not installed or not on PATH"
-    exit 127
-fi
-
-if [ ! -e "$input" ]; then
-    error "input file not found: $input"
-    exit 1
-fi
-
-if [ ! -f "$input" ]; then
-    error "input path is not a regular file: $input"
-    exit 1
-fi
-
-if [ ! -r "$input" ]; then
-    error "input file is not readable: $input"
-    exit 1
-fi
-
-if [ -n "$frames_start" ]; then
-    base=$(multi_frame_output_base "$input" "$requested_output")
-    outputs=()
-    timestamps=()
-    tmp_outputs=()
-    i=0
-
-    while [ "$i" -lt "$frame_count" ]; do
-        ts=$(awk "BEGIN {printf \"%.3f\", $frames_start_seconds + ($i * $frame_interval_seconds)}")
-        label=$(seconds_to_filename_timestamp "$ts")
-        out="${base}-${label}.jpg"
-        tmp="${base}-${label}.part.jpg"
-
-        if [ "$force" = false ] && [ -e "$out" ]; then
-            error "output file already exists: $out"
-            exit 1
-        fi
-
-        outputs+=( "$out" )
-        timestamps+=( "$ts" )
-        tmp_outputs+=( "$tmp" )
-        i=$((i + 1))
-    done
-
-    info "capturing $frame_count frames starting at $frames_start every $frame_interval with JPEG quality $jpeg_quality"
-
-    cleanup_multi() {
-        for f in "${tmp_outputs[@]}"; do
-            [ ! -e "$f" ] || rm -f "$f"
-        done
-    }
-
-    trap cleanup_multi EXIT INT TERM HUP
-
-    i=0
-    while [ "$i" -lt "$frame_count" ]; do
-        if ! capture_frame "$input" "${timestamps[$i]}" "${tmp_outputs[$i]}"; then
-            error "frame capture failed at ${timestamps[$i]} seconds"
-            exit 1
-        fi
-
-        mv -f -- "${tmp_outputs[$i]}" "${outputs[$i]}"
-        printf 'created: %s\n' "${outputs[$i]}"
-        i=$((i + 1))
-    done
-
-    trap - EXIT INT TERM HUP
-    exit 0
-fi
-
-if [ -n "$frame_time" ]; then
-    output=${requested_output:-$(derive_frame_output_path "$input")}
-
-    if [ "$input" = "$output" ]; then
-        error "input and output paths must be different"
-        exit 1
-    fi
-
-    if [ "$force" = false ] && [ -e "$output" ]; then
-        error "output file already exists: $output"
-        exit 1
-    fi
-
-    case "$output" in
-        *.jpg|*.jpeg) ;;
-        *)
-            error "frame output must use .jpg or .jpeg"
-            exit 2
-            ;;
-    esac
-
-    case "$output" in
-        *.jpg)  tmp_output="${output%.jpg}.part.jpg" ;;
-        *.jpeg) tmp_output="${output%.jpeg}.part.jpeg" ;;
-    esac
-
-    info "capturing frame at $frame_time with JPEG quality $jpeg_quality"
-
-    cleanup() {
-        [ ! -e "$tmp_output" ] || rm -f "$tmp_output"
-    }
-
-    trap cleanup EXIT INT TERM HUP
-
-    if ! capture_frame "$input" "$frame_seconds" "$tmp_output"; then
-        error "frame capture failed"
-        exit 1
-    fi
-
-    mv -f -- "$tmp_output" "$output"
-    trap - EXIT INT TERM HUP
-    printf 'created: %s\n' "$output"
-    exit 0
-fi
-
-output=${requested_output:-$(derive_video_output_path "$input")}
-
-if [ "$input" = "$output" ]; then
-    error "input and output paths must be different"
-    exit 1
-fi
-
-if [ "$force" = false ] && [ -e "$output" ]; then
-    error "output file already exists: $output"
-    exit 1
-fi
-
-if ! have_aac_encoder; then
-    error "AAC encoder not found in ffmpeg"
-    exit 1
-fi
-
-case "$output" in
-    *.mp4) tmp_output="${output%.mp4}.part.mp4" ;;
-    *)     tmp_output="${output}.part.mp4" ;;
-esac
-
-if ! video_encoder=$(select_video_encoder); then
-    error "no supported H.264 encoder found in ffmpeg"
-    error "tried: libx264, libopenh264, h264_nvenc, h264_qsv, h264_amf, h264_mf, h264_d3d12va, h264_vulkan, h264_videotoolbox"
-    exit 1
-fi
-
-info "using video encoder: $video_encoder"
-
-if [ -n "$clip_start" ] && [ -n "$clip_end" ]; then
-    info "creating clip from $clip_start to $clip_end"
-elif [ -n "$clip_start" ]; then
-    info "creating clip from $clip_start to end of input"
-elif [ -n "$clip_end" ]; then
-    info "creating clip from start of input to $clip_end"
-fi
-
-cleanup() {
-    [ ! -e "$tmp_output" ] || rm -f "$tmp_output"
-}
-
-trap cleanup EXIT INT TERM HUP
-
-if ! run_ffmpeg "$video_encoder" "$input" "$tmp_output"; then
-    error "conversion failed"
-    exit 1
-fi
-
-mv -f -- "$tmp_output" "$output"
-trap - EXIT INT TERM HUP
-printf 'created: %s\n' "$output"
