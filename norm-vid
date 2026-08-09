@@ -33,7 +33,7 @@ Options:
   --clear-metadata         Clear input global metadata before applying edits
   --trim-seconds N         Trim N seconds from the start during conversion
   --fps N                  Convert output video to frame rate N
-  --cfr                    Force constant frame rate output
+  --cfr                    Force constant frame rate output; cannot be used with --fps
   -h, --help               Show this help text
 
 Examples:
@@ -42,7 +42,7 @@ Examples:
   $progname --title "New Title" input.avi
   $progname --trim-seconds 0.04 input.mp4 output.mp4
   $progname --fps 30 input.mov
-  $progname --fps 30 --cfr input.mov
+  $progname --cfr input.mov
 EOF
 }
 
@@ -217,6 +217,11 @@ parse_args() {
 
     if [ "$preserve_metadata" = true ] && [ "$clear_metadata" = true ]; then
         error "--preserve-metadata and --clear-metadata cannot be used together"
+        exit 2
+    fi
+
+    if [ -n "$fps" ] && [ "$cfr" = true ]; then
+        error "--fps and --cfr cannot be used together"
         exit 2
     fi
 
