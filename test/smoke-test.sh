@@ -76,6 +76,9 @@ say
 run_expect_failure "no arguments should fail" \
     "$target_script"
 
+run_expect_failure "--fps and --cfr together should fail" \
+    "$target_script" --fps 30 --cfr "$tmp_dir/does-not-exist.flv"
+
 run_expect_failure "nonexistent input should fail" \
     "$target_script" "$tmp_dir/does-not-exist.flv"
 
