@@ -32,7 +32,7 @@ By default, `norm-vid` refuses to overwrite an existing output file. Use `-f` or
 ```sh
 ./norm-vid -f input.mov output.mp4
 ./norm-vid --force --frame 1:23.500 input.mp4 still.jpg
-./norm-vid -f --frames 10 --interval 5 --count 4 input.mp4
+./norm-vid -f --frame 10 --interval 5 --count 4 input.mp4
 ```
 
 This applies to normal video conversion, single-frame capture, and every output in multi-frame capture. Temporary files are still used, so the existing final output is replaced only after the new output has been successfully created.
@@ -73,10 +73,10 @@ Use `--jpeg-quality N` for quality 1–100; the default is 90.
 
 ### Multiple frames
 
-Use `--frames START`, `--interval TIME`, and `--count N` together:
+Use `--frame START`, `--interval TIME`, and `--count N` together:
 
 ```sh
-./norm-vid --frames 10 --interval 5 --count 4 input.mp4
+./norm-vid --frame 10 --interval 5 --count 4 input.mp4
 ```
 
 This produces:
@@ -91,7 +91,7 @@ input-25.000.jpg
 An optional output argument supplies the base name:
 
 ```sh
-./norm-vid --frames 1:00 --interval 10 --count 3 input.mp4 shots.jpg
+./norm-vid --frame 1:00 --interval 10 --count 3 input.mp4 shots.jpg
 ```
 
 produces `shots-1-00.000.jpg`, `shots-1-10.000.jpg`, and `shots-1-20.000.jpg`.
@@ -104,7 +104,7 @@ Without `--force`, all multi-frame target names are checked before capture start
 
 ## Frame-capture option compatibility
 
-`--frame` and `--frames` cannot be combined with `--start`, `--end`, `--fps`, `--cfr`, or MP4 metadata options. `--frame` and `--frames` cannot be used together.
+`--frame` cannot be combined with `--start`, `--end`, `--fps`, `--cfr`, or MP4 metadata options.
 
 ## Testing
 
