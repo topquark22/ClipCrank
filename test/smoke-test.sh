@@ -96,25 +96,31 @@ run_expect_failure_message "--fps and --cfr together should fail" \
     "--fps and --cfr cannot be used together" \
     "$target_script" --fps 30 --cfr "$tmp_dir/does-not-exist.flv"
 
-run_expect_failure_message "--start without --end should fail" \
-    "--start requires --end" \
-    "$target_script" --start 0:00:01 "$tmp_dir/does-not-exist.flv"
-
-run_expect_failure_message "--end without --start should fail" \
-    "--end requires --start" \
-    "$target_script" --end 0:00:02 "$tmp_dir/does-not-exist.flv"
-
-run_expect_failure_message "invalid clip timestamp should fail" \
+run_expect_failure_message "invalid start timestamp should fail" \
     "start must be in h:m:s[.ms] form" \
-    "$target_script" --start 0:61:00 --end 1:00:00 "$tmp_dir/does-not-exist.flv"
+    "$target_script" --start 0:61:00 "$tmp_dir/does-not-exist.flv"
+
+run_expect_failure_message "invalid end timestamp should fail" \
+    "end must be in h:m:s[.ms] form" \
+    "$target_script" --end 0:61:00 "$tmp_dir/does-not-exist.flv"
 
 run_expect_failure_message "clip end must be later than start" \
     "--end must be later than --start" \
     "$target_script" --start 0:01:00 --end 0:00:59 "$tmp_dir/does-not-exist.flv"
 
-run_expect_failure_message "clip and trim should be incompatible" \
-    "--trim-seconds cannot be used with --start and --end" \
-    "$target_script" --trim-seconds 0.04 --start 0:00:01 --end 0:00:02 "$tmp_dir/does-not-exist.flv"
+run_expect_failure_message "zero end time should fail" \
+    "--end must be later than the start of the input" \
+    "$target_script" --end 0:00:00 "$tmp_dir/does-not-exist.flv"
+
+run_expect_failure_message "removed trim-seconds option should fail" \
+    "unknown option: --trim-seconds" \
+    "$target_script" --trim-seconds 0.04 "$tmp_dir/does-not-exist.flv"
+
+run_expect_failure "start-only clip should pass option validation" \
+    "$target_script" --start 0:00:01 "$tmp_dir/does-not-exist.flv"
+
+run_expect_failure "end-only clip should pass option validation" \
+    "$target_script" --end 0:00:02 "$tmp_dir/does-not-exist.flv"
 
 run_expect_failure "nonexistent input should fail" \
     "$target_script" "$tmp_dir/does-not-exist.flv"
