@@ -63,11 +63,13 @@ If `--start` is omitted, output begins at the start of the input. If `--end` is 
 ./norm-vid --frame 1:23.500 input.mp4
 ```
 
-With no output filename, the timestamp is appended:
+With no output filename, the timestamp is normalized and appended so generated filenames sort chronologically:
 
 ```text
-input-1-23.500.jpg
+input-01-23.500.jpg
 ```
+
+Minutes and seconds are zero-padded to at least two digits. Hours are included only when hours were supplied in the `--frame` timestamp. Milliseconds are included only when milliseconds were supplied. Seconds-only values are normalized into minutes and seconds, so `--frame 72` produces a suffix of `01-12`.
 
 Use `--jpeg-quality N` for quality 1–100; the default is 90.
 
@@ -82,10 +84,10 @@ Use `--frame START`, `--interval TIME`, and `--count N` together:
 This produces:
 
 ```text
-input-10.000.jpg
-input-15.000.jpg
-input-20.000.jpg
-input-25.000.jpg
+input-00-10.jpg
+input-00-15.jpg
+input-00-20.jpg
+input-00-25.jpg
 ```
 
 An optional output argument supplies the base name:
@@ -94,7 +96,9 @@ An optional output argument supplies the base name:
 ./norm-vid --frame 1:00 --interval 10 --count 3 input.mp4 shots.jpg
 ```
 
-produces `shots-1-00.000.jpg`, `shots-1-10.000.jpg`, and `shots-1-20.000.jpg`.
+produces `shots-01-00.jpg`, `shots-01-10.jpg`, and `shots-01-20.jpg`.
+
+If either the starting timestamp or interval includes milliseconds, generated filenames include milliseconds consistently across the sequence. If the starting timestamp includes hours, generated filenames include hours consistently across the sequence.
 
 Without `--force`, all multi-frame target names are checked before capture starts; if any already exists, nothing is created. With `--force`, existing target images are replaced as each newly captured frame completes successfully.
 
