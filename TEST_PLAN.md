@@ -15,7 +15,7 @@ The test plan aims to confirm that `norm-vid`:
 - converts them into playable `.mp4` output,
 - selects a working H.264 encoder from the local `ffmpeg` environment,
 - uses AAC audio when audio is present,
-- creates clips with the requested start and end times,
+- creates clips using a start time, end time, or both,
 - succeeds on old or awkward media when `ffmpeg` can decode it,
 - fails clearly when prerequisites or input files are missing,
 - avoids clobbering existing output files.
@@ -82,288 +82,184 @@ A test is considered successful when:
 
 ### 1. Legacy FLV with audio
 
-**Purpose:** confirm that an old Flash-era file can be converted successfully.
-
-Example command:
-
 ```sh
 ./norm-vid sample.flv output.mp4
 ```
 
-Expected result:
-- succeeds,
-- produces playable MP4,
-- output video is H.264,
-- output audio is AAC if present.
+Expected: playable H.264/AAC MP4.
 
 ### 2. FLV without audio
-
-**Purpose:** confirm that optional audio mapping behaves correctly.
-
-Example command:
 
 ```sh
 ./norm-vid silent.flv silent.mp4
 ```
 
-Expected result:
-- succeeds,
-- produces MP4 with video only,
-- no failure due to missing audio stream.
+Expected: playable video-only MP4.
 
 ### 3. AVI input
-
-**Purpose:** confirm support for a common legacy container.
-
-Example command:
 
 ```sh
 ./norm-vid sample.avi sample.mp4
 ```
 
-Expected result:
-- succeeds,
-- output is playable,
-- output video is H.264.
+Expected: playable H.264 MP4.
 
 ### 4. MOV input
-
-**Purpose:** confirm support for camera/editor style source files.
-
-Example command:
 
 ```sh
 ./norm-vid sample.mov sample.mp4
 ```
 
-Expected result:
-- succeeds,
-- output is playable.
+Expected: playable output.
 
 ### 5. MKV input
-
-**Purpose:** confirm support for a modern but flexible container.
-
-Example command:
 
 ```sh
 ./norm-vid sample.mkv sample.mp4
 ```
 
-Expected result:
-- succeeds,
-- output is playable.
+Expected: playable output.
 
 ### 6. Video with odd dimensions
-
-**Purpose:** verify that scaling to even dimensions works.
-
-Example command:
 
 ```sh
 ./norm-vid odd-dimensions.mkv odd-dimensions.mp4
 ```
 
-Expected result:
-- succeeds,
-- output dimensions are encoder-safe,
-- output remains playable.
+Expected: encoder-safe even dimensions and playable output.
 
 ### 7. Video-only input
-
-**Purpose:** confirm success when no audio stream exists.
-
-Example command:
 
 ```sh
 ./norm-vid video-only.avi video-only.mp4
 ```
 
-Expected result:
-- succeeds,
-- output has video only,
-- no failure due to missing audio.
+Expected: successful video-only output.
 
 ### 8. Input with subtitles or data streams
-
-**Purpose:** verify that extra streams do not break conversion.
-
-Example command:
 
 ```sh
 ./norm-vid extra-streams.mkv extra-streams.mp4
 ```
 
-Expected result:
-- succeeds,
-- output contains normalized video,
-- audio included if present,
-- subtitle/data streams are omitted.
+Expected: normalized video/audio with subtitle and data streams omitted.
 
 ### 9. Already-MP4 input
-
-**Purpose:** verify that MP4 input can still be normalized.
-
-Example command:
 
 ```sh
 ./norm-vid input.mp4 normalized.mp4
 ```
 
-Expected result:
-- succeeds,
-- output is recreated cleanly,
-- no conflict with temporary filename behavior.
+Expected: cleanly regenerated MP4.
 
-### 10. Create a video clip
-
-**Purpose:** verify that explicit start and end times produce only the requested portion of the input.
-
-Example command:
+### 10. Clip with start and end
 
 ```sh
 ./norm-vid --start 0:00:10.250 --end 0:00:20.750 input.mp4 clip.mp4
 ```
 
-Expected result:
-- succeeds,
-- output begins at approximately 10.250 seconds in the original input,
-- output ends at approximately 20.750 seconds in the original input,
-- output duration is approximately 10.500 seconds,
-- output remains normalized as H.264/AAC.
+Expected:
+- begins at approximately 10.250 seconds in the source,
+- ends at approximately 20.750 seconds,
+- duration approximately 10.500 seconds.
 
-Use `ffprobe` to check the resulting duration when practical. Small differences at frame or audio-sample boundaries are acceptable.
+### 11. Clip with start only
+
+```sh
+./norm-vid --start 0:00:10.250 input.mp4 clip.mp4
+```
+
+Expected:
+- begins at approximately 10.250 seconds in the source,
+- continues to the end of the input.
+
+### 12. Clip with end only
+
+```sh
+./norm-vid --end 0:00:20.750 input.mp4 clip.mp4
+```
+
+Expected:
+- begins at the start of the input,
+- ends at approximately 20.750 seconds,
+- duration approximately 20.750 seconds.
+
+Small differences at frame or audio-sample boundaries are acceptable.
 
 ## Failure Case Matrix
 
-### 11. Missing input argument
-
-Command:
+### 13. Missing input argument
 
 ```sh
 ./norm-vid
 ```
 
-Expected result:
-- usage shown,
-- non-zero exit status.
+Expected: usage shown and non-zero exit status.
 
-### 12. Nonexistent input file
-
-Command:
+### 14. Nonexistent input file
 
 ```sh
 ./norm-vid does-not-exist.flv out.mp4
 ```
 
-Expected result:
-- clear error message,
-- non-zero exit status.
+Expected: clear error and non-zero exit status.
 
-### 13. Input path is not a regular file
-
-Command:
+### 15. Input path is not a regular file
 
 ```sh
 ./norm-vid . out.mp4
 ```
 
-Expected result:
-- clear error message,
-- non-zero exit status.
+Expected: clear error and non-zero exit status.
 
-### 14. Output file already exists
-
-Command:
+### 16. Output file already exists
 
 ```sh
 touch out.mp4
 ./norm-vid sample.flv out.mp4
 ```
 
-Expected result:
-- clear error message,
-- existing output file is not overwritten,
-- non-zero exit status.
+Expected: existing output is not overwritten.
 
-### 15. Clip start without end
-
-Command:
-
-```sh
-./norm-vid --start 0:00:10 input.mp4 out.mp4
-```
-
-Expected result:
-- clear error that `--start` requires `--end`,
-- non-zero exit status.
-
-### 16. Clip end before start
-
-Command:
+### 17. Clip end before start
 
 ```sh
 ./norm-vid --start 0:00:20 --end 0:00:10 input.mp4 out.mp4
 ```
 
-Expected result:
-- clear error that the end must be later than the start,
-- non-zero exit status.
+Expected: clear error that the end must be later than the start.
 
-### 17. Invalid clip timestamp
-
-Command:
+### 18. Invalid clip timestamp
 
 ```sh
-./norm-vid --start 0:61:00 --end 1:00:00 input.mp4 out.mp4
+./norm-vid --start 0:61:00 input.mp4 out.mp4
 ```
 
-Expected result:
-- clear timestamp-format error,
-- non-zero exit status.
+Expected: clear timestamp-format error.
 
-### 18. Clip combined with trim-seconds
-
-Command:
+### 19. Removed trim-seconds option
 
 ```sh
-./norm-vid --trim-seconds 0.04 --start 0:00:10 --end 0:00:20 input.mp4 out.mp4
+./norm-vid --trim-seconds 0.04 input.mp4 out.mp4
 ```
 
-Expected result:
-- clear option-conflict error,
-- non-zero exit status.
+Expected: unknown-option error and non-zero exit status.
 
-### 19. ffmpeg missing from PATH
+### 20. ffmpeg missing from PATH
 
-Method:
-- temporarily run in an environment where `ffmpeg` is not available.
+Expected: clear error and failure status.
 
-Expected result:
-- clear error message,
-- exit status indicates failure.
+### 21. No usable H.264 encoder available
 
-### 20. No usable H.264 encoder available
+Expected: clear error and non-zero exit status.
 
-Method:
-- run in an environment where `ffmpeg` exists but exposes no supported H.264 encoder.
+### 22. No AAC encoder available
 
-Expected result:
-- clear error message,
-- non-zero exit status.
-
-### 21. No AAC encoder available
-
-Method:
-- run in an environment where `ffmpeg` exists but has no AAC encoder.
-
-Expected result:
-- clear error message,
-- non-zero exit status.
+Expected: clear error and non-zero exit status.
 
 ## Output Verification
 
-Where `ffprobe` is available, inspect the output:
+Where `ffprobe` is available:
 
 ```sh
 ffprobe -v error -show_entries format=format_name,duration -of default=nw=1 output.mp4
@@ -378,13 +274,13 @@ Expected values:
 
 For video-only outputs, the audio probe may return nothing.
 
-For clip outputs, compare the reported duration with `end - start`, allowing for normal frame/audio-sample boundary differences.
+For clips with both boundaries, compare duration with `end - start`. For end-only clips, compare duration with `end`. For start-only clips, confirm the output continues through the source's end.
 
 ## Recommended Test Media Set
 
-A useful starter set would include:
+Use short samples where possible, including:
 
-- one old `.flv` music or web video,
+- one old `.flv`,
 - one `.avi`,
 - one `.mov`,
 - one `.mkv`,
@@ -393,19 +289,15 @@ A useful starter set would include:
 - one file with subtitles or extra streams,
 - one input long enough to test clipping at known visual or audio landmarks.
 
-These files do not need to be large. Short samples are preferable.
-
 ## Regression Testing
 
 After every meaningful script change, re-run at least:
 
-1. one known-good FLV conversion,
+1. one known-good conversion,
 2. one no-audio case,
-3. one clip conversion,
+3. start-only, end-only, and bounded clip conversions,
 4. one failure case such as nonexistent input,
-5. one case where output file already exists.
-
-This gives a fast confidence check without requiring a full test pass.
+5. one case where output already exists.
 
 ## Future Improvements
 
@@ -416,25 +308,6 @@ Possible future testing improvements:
 - CI coverage for argument and error behavior,
 - a small set of reusable sample media files if repository size allows.
 
-## Pass/Fail Summary Template
-
-For manual test sessions, record results like this:
-
-| Test Case | Input | Expected | Actual | Pass/Fail | Notes |
-|---|---|---|---|---|---|
-| FLV with audio | `sample.flv` | Playable MP4 with H.264/AAC |  |  |  |
-| AVI input | `sample.avi` | Playable MP4 |  |  |  |
-| Video clip | `input.mp4` | Requested interval only |  |  |  |
-| Missing input | none | Usage + non-zero exit |  |  |  |
-| Output exists | `sample.flv` -> existing `out.mp4` | Refuse overwrite |  |  |  |
-
 ## Conclusion
 
-For this project, testing should remain simple, concrete, and media-driven.
-
-The priority is not perfect formalism. The priority is confidence that:
-- old and awkward files can be converted,
-- requested clips contain the intended portion of the source,
-- the output is playable,
-- the script fails clearly when it should,
-- and behavior remains stable as the script evolves.
+The priority is confidence that old and awkward files can be converted, requested clips contain the intended portion of the source, output is playable, and failures are clear and predictable.
