@@ -1,6 +1,6 @@
 # norm-vid
 
-`norm-vid` converts many kinds of video files into standardized MP4 output using `ffmpeg`. It can also capture one or more JPEG still frames from a video.
+`norm-vid` converts many kinds of video files into standardized MP4 output using `ffmpeg`. It can also create clips based on starting and/or ending timestamps, and capture one or more JPEG still frames from a video.
 
 ## Features
 
