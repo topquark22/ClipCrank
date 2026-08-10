@@ -295,6 +295,11 @@ validate_frame_modes() {
         }
         validate_positive_integer "$frame_count" count
 
+        last_frame_seconds=$(awk "BEGIN {printf \"%.3f\", $frame_seconds + (($frame_count - 1) * $frame_interval_seconds)}")
+        if awk "BEGIN {exit !($last_frame_seconds >= 3600)}"; then
+            frame_filename_hours=true
+        fi
+
         case "$frame_interval" in
             *.*) frame_filename_millis=true ;;
         esac
