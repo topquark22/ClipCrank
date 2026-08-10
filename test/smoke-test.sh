@@ -24,6 +24,7 @@ run_expect_failure "no arguments should fail" "$target_script"
 run_expect_failure_message "--fps and --cfr together should fail" "--fps and --cfr cannot be used together" "$target_script" --fps 30 --cfr "$tmp_dir/missing.flv"
 run_expect_failure_message "invalid start timestamp should fail" "start must be in [[h:]m:]s[.ms] form" "$target_script" --start 0:61:00 "$tmp_dir/missing.flv"
 run_expect_failure_message "clip end must be later than start" "--end must be later than --start" "$target_script" --start 60 --end 59.999 "$tmp_dir/missing.flv"
+run_expect_failure_message "clip across hour boundary should pass validation" "input file not found" "$target_script" --start 59:59 --end 1:00:01 "$tmp_dir/missing.flv"
 run_expect_failure_message "removed trim-seconds option should fail" "unknown option: --trim-seconds" "$target_script" --trim-seconds 0.04 "$tmp_dir/missing.flv"
 
 run_expect_failure_message "jpeg quality requires frame mode" "--jpeg-quality requires --frame" "$target_script" --jpeg-quality 90 "$tmp_dir/missing.flv"
