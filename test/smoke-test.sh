@@ -41,6 +41,25 @@ run_expect_failure "long force flag should parse" "$target_script" --force "$tmp
 run_expect_failure "force with single frame should parse" "$target_script" -f --frame 10 "$tmp_dir/missing.flv"
 run_expect_failure "force with multiple frames should parse" "$target_script" --force --frame 10 --interval 5 --count 4 "$tmp_dir/missing.flv"
 
+mkdir "$tmp_dir/bin"
+cat > "$tmp_dir/bin/ffmpeg" <<'EOF'
+#!/usr/bin/env bash
+for arg in "$@"; do
+    output=$arg
+done
+: > "$output"
+EOF
+chmod +x "$tmp_dir/bin/ffmpeg"
+touch "$tmp_dir/hour-boundary.mp4"
+if PATH="$tmp_dir/bin:$PATH" "$target_script" --frame 59:59 --interval 1 --count 3 "$tmp_dir/hour-boundary.mp4" "$tmp_dir/hour.jpg" >/dev/null 2>&1 &&
+   [ -f "$tmp_dir/hour-00-59-59.jpg" ] &&
+   [ -f "$tmp_dir/hour-01-00-00.jpg" ] &&
+   [ -f "$tmp_dir/hour-01-00-01.jpg" ]; then
+    pass "frame filenames crossing hour boundary should include hours"
+else
+    fail "frame filenames crossing hour boundary should include hours"
+fi
+
 run_expect_failure "nonexistent input should fail" "$target_script" "$tmp_dir/missing.flv"
 mkdir "$tmp_dir/input-dir"; run_expect_failure "directory input should fail" "$target_script" "$tmp_dir/input-dir"
 touch "$tmp_dir/unreadable.flv"; chmod 000 "$tmp_dir/unreadable.flv"; run_expect_failure "unreadable input should fail" "$target_script" "$tmp_dir/unreadable.flv"; chmod 600 "$tmp_dir/unreadable.flv"
