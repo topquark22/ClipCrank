@@ -38,7 +38,7 @@ Arguments:
   OUTPUT                   Optional output path or multi-frame output base
 
 Operations:
-  --recode                  Recode input as standardized H.264/AAC MP4
+  --reencode                Recode input as standardized H.264/AAC MP4
   --show-metadata           Display input metadata and exit
   --frame TIME              Capture JPEG frame(s) starting at [[h:]m:]s[.ms]
 
@@ -62,10 +62,10 @@ Options:
   -h, --help               Show this help text
 
 Examples:
-  $progname --recode old-video.avi
-  $progname --recode -f input.mov output.mp4
+  $progname --reencode old-video.avi
+  $progname --reencode -f input.mov output.mp4
   $progname --show-metadata input.mov
-  $progname --recode --start 12.500 --end 2:05 input.mov clip.mp4
+  $progname --reencode --start 12.500 --end 2:05 input.mov clip.mp4
   $progname --frame 1:23.500 input.mp4
   $progname --frame 10 --interval 5 --count 4 input.mp4
   $progname --force --frame 1:00 --interval 10 --count 3 input.mp4 shots.jpg
@@ -341,7 +341,7 @@ parse_args() {
                 force=true
                 shift
                 ;;
-            --recode)
+            --reencode)
                 recode=true
                 shift
                 ;;
