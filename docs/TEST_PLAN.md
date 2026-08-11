@@ -17,7 +17,8 @@ The test plan aims to confirm that `clipcrank`:
 - selects a working H.264 encoder from the local `ffmpeg` environment,
 - uses AAC audio when audio is present,
 - adds or replaces audio on video input,
-- creates H.264/AAC MP4 output from a JPEG/PNG still image plus audio,
+- creates video from still-image input plus audio,
+- detects still-image input from media content rather than filename extension,
 - creates clips using a start time, end time, or both,
 - accepts timestamps in `[[h:]m:]s[.ms]` form,
 - captures single JPEG frames,
@@ -27,7 +28,7 @@ The test plan aims to confirm that `clipcrank`:
 - supports configurable JPEG quality,
 - supports explicit frame-rate conversion and constant-frame-rate output,
 - displays metadata using `ffprobe`,
-- supports preserving, clearing, and setting metadata during generated MP4 output,
+- supports preserving, clearing, and setting metadata during re-encoding,
 - avoids overwriting existing output by default,
 - overwrites existing output only when `-f` or `--force` is supplied,
 - succeeds on old or awkward media when `ffmpeg` can decode it,
@@ -42,18 +43,18 @@ This project does not currently aim to prove:
 - subtitle retention,
 - data-stream retention,
 - chapter preservation,
-- support for every codec ever produced,
+- support for every codec or still-image format ever produced,
 - identical encoding results across all platforms or `ffmpeg` builds,
 - successful runtime use of every hardware encoder reported by `ffmpeg`.
 
-Because encoder availability differs by environment, tests focus on successful operation, playable output, and expected media properties rather than identical binary output.
+Because encoder and decoder availability differs by environment, tests focus on successful operation, playable output, and expected media properties rather than identical binary output.
 
 ## Test Approach
 
 Testing combines:
 
 1. **Automated smoke testing** with `test/smoke-test.sh`.
-2. **Real-media integration testing** using the committed sample files under `examples/`.
+2. **Real-media integration testing** using committed fixtures under `examples/`.
 3. **Manual media testing** using representative files.
 4. **Output inspection** with `ffprobe` for codecs, duration, metadata, and stream properties.
 
@@ -63,9 +64,7 @@ The smoke test should normally be run from the repository root:
 ./test/smoke-test.sh
 ```
 
-The current smoke suite contains 36 tests.
-
-Generated integration-test artifacts are written under `tmp/` and retained for manual inspection and UAT.
+The current smoke suite contains 37 tests.
 
 ## Operations
 
@@ -152,18 +151,21 @@ When native Windows `ffprobe` is used under Cygwin, its output may contain carri
 tr -d '\r'
 ```
 
-## Add Audio Tests
+## Add-Audio Tests
 
-The repository contains the audio and still-image fixtures:
+The canonical audio fixture is:
 
 ```text
 examples/bah.wav
+```
+
+The canonical still-image fixture is:
+
+```text
 examples/lenna.png
 ```
 
 ### Still image plus audio
-
-Use the still image as the visual input and `bah.wav` as the audio input:
 
 ```sh
 ./clipcrank --force --add-audio \
@@ -176,18 +178,22 @@ Expected:
 - output file exists,
 - output video codec is H.264,
 - output audio codec is AAC,
-- the still image remains visible for the duration of the audio,
-- the generated output is playable.
+- the still image is displayed for the duration of the audio,
+- the output basename corresponds to the audio input basename when the default naming rule is exercised.
 
-The smoke test keeps the source fixtures under `examples/`, writes the generated artifact under `tmp/`, and verifies that the output basename is the audio input basename with an `.mp4` extension:
+### Format-agnostic still-image detection
+
+The automated smoke suite copies the Lenna image to a temporary filename with a non-image extension:
 
 ```text
-bah.mp4
+tmp/lenna.still
 ```
 
-### Video plus replacement audio
+It then runs `--add-audio` using that file as the visual input.
 
-Use the Big Buck Bunny fixture as the video input and `bah.wav` as the replacement audio:
+Expected: the operation succeeds because the visual input is classified from decoded media content rather than from `.jpg`, `.jpeg`, or `.png` naming.
+
+### Video plus replacement audio
 
 ```sh
 ./clipcrank --force --add-audio \
@@ -199,8 +205,7 @@ Use the Big Buck Bunny fixture as the video input and `bah.wav` as the replaceme
 Expected:
 - output file exists,
 - output video codec is H.264,
-- output audio codec is AAC,
-- the output uses the audio stream supplied by `bah.wav`.
+- output audio codec is AAC.
 
 ## Clip Timestamp Formats
 
@@ -411,7 +416,7 @@ Expected: failure without modifying the existing file.
 
 Expected: successful replacement after the new output has been created successfully.
 
-The same behavior applies to `--add-audio`, single-frame, and multiple-frame output.
+The same behavior applies to audio operations, single-frame output, and multiple-frame output.
 
 Input and output paths that refer to the same file shall be rejected even when `--force` is supplied.
 
@@ -482,11 +487,11 @@ ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,pix_fmt,wid
 ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=nw=1 output.mp4
 ```
 
-For standard generated video output, verify:
+For standard re-encoded and `--add-audio` output, verify as applicable:
 
 - MP4-compatible container,
 - H.264 video,
-- AAC audio when audio exists or is supplied,
+- AAC audio,
 - `yuv420p` pixel format,
 - even-numbered output dimensions.
 
@@ -496,14 +501,14 @@ Small differences at frame or audio-sample boundaries are acceptable.
 
 ## Cleanup Verification
 
-Conversion, `--add-audio`, and frame-capture operations use temporary output files.
+Conversion and frame-capture operations use temporary output files.
 
 Tests shall confirm that:
 
 - partial temporary files are removed after failure or interruption,
 - final output paths are populated only after successful generation,
 - integration-test output may intentionally be retained after failure for diagnosis,
-- successful integration-test output under `tmp/` is retained for manual inspection and UAT.
+- generated real-media integration artifacts are retained under `tmp/` for inspection and overwritten on subsequent runs with `--force`.
 
 ## Regression Testing
 
@@ -513,7 +518,7 @@ After every meaningful script change, run:
 ./test/smoke-test.sh
 ```
 
-The current suite covers 36 cases, including:
+The current suite covers 37 cases, including:
 
 - explicit operation selection,
 - option conflicts,
@@ -529,20 +534,21 @@ The current suite covers 36 cases, including:
 - real VP9 fixture verification,
 - real VP9-to-H.264 re-encoding,
 - post-conversion H.264 verification,
-- still-image plus audio generation,
-- video plus replacement-audio generation,
-- H.264/AAC verification of `--add-audio` output,
-- audio-based output basename verification for still-image input.
+- still-image plus audio creation,
+- video plus replacement-audio creation,
+- H.264/AAC verification for audio operations,
+- default audio-derived basename checking,
+- still-image detection independent of filename extension.
 
 Manual regression testing should additionally include representative files with and without audio and at least one long-duration source when hour-boundary behavior is relevant.
 
 ## Platform Notes
 
-The shell script is intended for POSIX-like environments with `ffmpeg` available on `PATH`.
+The shell script is intended for POSIX-like environments with `ffmpeg` and `ffprobe` available on `PATH`.
 
 Under Cygwin, native Windows `ffmpeg.exe` and `ffprobe.exe` may not understand Cygwin absolute paths such as `/home/...`. Real-media tests therefore use repository-relative paths and assume the smoke test is launched from the repository root.
 
-Native Windows `ffprobe` may emit CRLF line endings. Automated codec comparisons strip carriage returns before comparing values.
+Native Windows `ffprobe` may emit CRLF line endings. Automated codec and input-classification comparisons strip carriage returns before comparing values.
 
 ## Conclusion
 
