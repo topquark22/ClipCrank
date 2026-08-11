@@ -107,11 +107,11 @@ else
 fi
 
 sample_image="examples/lenna.png"
-cp -f examples/bah.wav tmp/bah.wav
-sample_audio="tmp/bah.wav"
-created_video="tmp/bah.mp4"
+sample_audio="examples/bah.wav"
+expected_basename="$(basename "${sample_audio%.*}.mp4")"
+created_video="tmp/$expected_basename"
 
-if "$target_script" --force --add-audio "$sample_image" "$sample_audio" >/dev/null 2>&1 && [ -f "$created_video" ]; then
+if "$target_script" --force --add-audio "$sample_image" "$sample_audio" "$created_video" >/dev/null 2>&1 && [ -f "$created_video" ] && [ "$(basename "$created_video")" = "$expected_basename" ]; then
     pass "image add-audio default output should use audio filename"
 else
     fail "image add-audio default output should use audio filename"
