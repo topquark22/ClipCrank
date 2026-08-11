@@ -20,6 +20,7 @@ The test plan aims to confirm that `clipcrank`:
 - creates video from still-image input plus audio,
 - detects still-image input from media content rather than filename extension,
 - extracts the first audio stream to MP3,
+- removes audio while retaining H.264 video,
 - creates clips using a start time, end time, or both,
 - accepts timestamps in `[[h:]m:]s[.ms]` form,
 - captures single JPEG frames,
@@ -65,7 +66,7 @@ The smoke test should normally be run from the repository root:
 ./test/smoke-test.sh
 ```
 
-The current smoke suite contains 39 tests.
+The current smoke suite contains 43 tests.
 
 ## Operations
 
@@ -75,6 +76,7 @@ ClipCrank currently exposes these primary operations:
 --reencode
 --add-audio
 --extract-audio
+--remove-audio
 --show-metadata
 --frame TIME
 ```
@@ -245,6 +247,28 @@ mp3
 ```
 
 An explicit output path shall use the `.mp3` extension.
+
+## Remove-Audio Tests
+
+The smoke suite uses the generated H.264/AAC video:
+
+```text
+tmp/bah.mp4
+```
+
+Run:
+
+```sh
+./clipcrank --force --remove-audio tmp/bah.mp4 tmp/bah-silent.mp4
+```
+
+Expected:
+- the output file exists,
+- the output video codec is H.264,
+- no audio stream is present,
+- the output filename is mandatory.
+
+Running `--remove-audio` without an output argument shall print Usage and exit non-zero.
 
 ## Clip Timestamp Formats
 
@@ -477,6 +501,14 @@ Expected: Usage is printed and the command exits non-zero.
 
 Expected: clear error that only one operation may be specified.
 
+### Missing remove-audio output
+
+```sh
+./clipcrank --remove-audio input.mp4
+```
+
+Expected: Usage is printed and the command exits non-zero.
+
 ### End before start
 
 ```sh
@@ -536,6 +568,8 @@ For standard re-encoded and `--add-audio` output, verify as applicable:
 
 For `--extract-audio`, verify that the output contains an MP3 audio stream and no video stream.
 
+For `--remove-audio`, verify that the output contains H.264 video and no audio stream.
+
 For clips with both boundaries, compare duration with `end - start`. For end-only clips, compare duration with `end`. For start-only clips, confirm that output continues through the source's end.
 
 Small differences at frame or audio-sample boundaries are acceptable.
@@ -559,7 +593,7 @@ After every meaningful script change, run:
 ./test/smoke-test.sh
 ```
 
-The current suite covers 39 cases, including:
+The current suite covers 43 cases, including:
 
 - explicit operation selection,
 - option conflicts,
@@ -581,7 +615,11 @@ The current suite covers 39 cases, including:
 - default audio-derived basename checking,
 - still-image detection independent of filename extension,
 - MP3 audio extraction,
-- MP3 codec verification.
+- MP3 codec verification,
+- mandatory `--remove-audio` output validation,
+- audio removal,
+- H.264 verification after audio removal,
+- confirmation that removed-audio output contains no audio stream.
 
 Manual regression testing should additionally include representative files with and without audio and at least one long-duration source when hour-boundary behavior is relevant.
 
