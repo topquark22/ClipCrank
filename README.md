@@ -1,6 +1,6 @@
 # ClipCrank
 
-`clipcrank` converts many kinds of video files into standardized MP4 output using `ffmpeg`. It can also create clips based on starting and/or ending timestamps, capture one or more JPEG still frames from a video, add or replace audio using either a video or still image as the visual source, extract audio to MP3, and remove audio from video.
+`clipcrank` can convert (re-encode) many kinds of video files into standardized MP4 output using `ffmpeg`. It can also create clips based on starting and/or ending timestamps, capture one or more JPEG still frames from a video, add or replace audio using either a video or still image as the visual source, extract audio to MP3, and remove audio from video.
 
 `clipcrank` is a wrapper for `ffmpeg`, intended to simplify common `ffmpeg` operations and provide a more intuitive command-line interface. It does not replace `ffmpeg`; instead, it handles the underlying invocation and options for common video conversion, clipping, frame-capture, metadata, and audio tasks.
 
