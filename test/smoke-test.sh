@@ -86,5 +86,23 @@ run_expect_failure "same input and output path should still fail with force" "$t
 touch "$tmp_dir/existing.mp4"
 run_expect_failure "existing output should fail without force" "$target_script" --reencode "$tmp_dir/sample.flv" "$tmp_dir/existing.mp4"
 
+sample_video="$repo_root/examples/Big_Buck_Bunny_720_10s_1MB.webm"
+reencoded_video="$tmp_dir/Big_Buck_Bunny_720_10s_1MB.mp4"
+if [ -f "$sample_video" ] && [ "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$sample_video")" = "vp9" ]; then
+    pass "example video should use VP9 codec"
+else
+    fail "example video should use VP9 codec"
+fi
+if "$target_script" --reencode "$sample_video" "$reencoded_video" >/dev/null 2>&1 && [ -f "$reencoded_video" ]; then
+    pass "example VP9 video should re-encode successfully"
+else
+    fail "example VP9 video should re-encode successfully"
+fi
+if [ -f "$reencoded_video" ] && [ "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$reencoded_video")" = "h264" ]; then
+    pass "re-encoded example video should use H.264 codec"
+else
+    fail "re-encoded example video should use H.264 codec"
+fi
+
 say; say "Summary:"; say "  Passed: $pass_count"; say "  Failed: $fail_count"
 if [ "$fail_count" -ne 0 ]; then exit 1; fi
