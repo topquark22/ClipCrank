@@ -10,7 +10,7 @@
 - Creates clips using optional start/end times
 - Captures single or multiple JPEG frames
 - Adds or replaces audio on video input
-- Creates H.264/AAC MP4 video from a JPEG/PNG still image plus audio
+- Creates H.264/AAC MP4 video from a still image plus audio
 - JPEG quality defaults to 90 and is configurable
 - Refuses to overwrite existing output by default
 - Supports `-f` / `--force` to overwrite existing output
@@ -20,7 +20,7 @@
 
 - A POSIX-like shell environment
 - `ffmpeg` installed and available on `PATH`
-- `ffprobe` installed and available on `PATH` for metadata inspection
+- `ffprobe` installed and available on `PATH` for metadata inspection and `--add-audio` input classification
 
 No ImageMagick or other image-processing package is required.
 
@@ -78,7 +78,7 @@ An operation must be selected explicitly. If no operation is specified, `clipcra
 The available operations currently are:
 
 - `--reencode` — recode video as standardized H.264/AAC MP4
-- `--add-audio` — add or replace audio using a video or JPEG/PNG still image as input
+- `--add-audio` — add or replace audio using a video or still image as input
 - `--show-metadata` — display metadata and exit
 - `--frame TIME` — capture one or more JPEG frames
 
@@ -103,14 +103,14 @@ Use `--add-audio` with a video input to add or replace its audio track:
 
 The replacement audio may use any format that the installed `ffmpeg` can decode. Output is standardized H.264/AAC MP4.
 
-`--add-audio` also accepts a JPEG or PNG still image as the visual input:
+`--add-audio` also accepts a still image as the visual input:
 
 ```sh
 ./clipcrank --add-audio image.jpg soundtrack.wav output.mp4
-./clipcrank --add-audio image.png soundtrack.mp3 output.mp4
+./clipcrank --add-audio image.tiff soundtrack.mp3 output.mp4
 ```
 
-The still image is displayed for the duration of the audio. If the output filename is omitted for still-image input, the default output basename is derived from the audio filename with an `.mp4` extension.
+Still-image input is detected from the media itself rather than from a filename-extension whitelist, so any still-image format that the installed FFmpeg can decode may be used. The still image is displayed for the duration of the audio. If the output filename is omitted for still-image input, the default output basename is derived from the audio filename with an `.mp4` extension.
 
 ### Overwriting existing files
 
