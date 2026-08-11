@@ -19,6 +19,7 @@ The test plan aims to confirm that `clipcrank`:
 - adds or replaces audio on video input,
 - creates video from still-image input plus audio,
 - detects still-image input from media content rather than filename extension,
+- extracts the first audio stream to MP3,
 - creates clips using a start time, end time, or both,
 - accepts timestamps in `[[h:]m:]s[.ms]` form,
 - captures single JPEG frames,
@@ -64,7 +65,7 @@ The smoke test should normally be run from the repository root:
 ./test/smoke-test.sh
 ```
 
-The current smoke suite contains 37 tests.
+The current smoke suite contains 39 tests.
 
 ## Operations
 
@@ -73,6 +74,7 @@ ClipCrank currently exposes these primary operations:
 ```text
 --reencode
 --add-audio
+--extract-audio
 --show-metadata
 --frame TIME
 ```
@@ -206,6 +208,43 @@ Expected:
 - output file exists,
 - output video codec is H.264,
 - output audio codec is AAC.
+
+## Extract-Audio Tests
+
+The smoke suite uses the generated still-image-plus-audio video:
+
+```text
+tmp/bah.mp4
+```
+
+Run:
+
+```sh
+./clipcrank --force --extract-audio tmp/bah.mp4
+```
+
+Expected:
+- the default output is `tmp/bah.mp3`,
+- the output file exists,
+- the output contains an MP3 audio stream.
+
+Verify the codec with:
+
+```sh
+ffprobe -v error \
+  -select_streams a:0 \
+  -show_entries stream=codec_name \
+  -of default=noprint_wrappers=1:nokey=1 \
+  tmp/bah.mp3
+```
+
+Expected output:
+
+```text
+mp3
+```
+
+An explicit output path shall use the `.mp3` extension.
 
 ## Clip Timestamp Formats
 
@@ -495,13 +534,15 @@ For standard re-encoded and `--add-audio` output, verify as applicable:
 - `yuv420p` pixel format,
 - even-numbered output dimensions.
 
+For `--extract-audio`, verify that the output contains an MP3 audio stream and no video stream.
+
 For clips with both boundaries, compare duration with `end - start`. For end-only clips, compare duration with `end`. For start-only clips, confirm that output continues through the source's end.
 
 Small differences at frame or audio-sample boundaries are acceptable.
 
 ## Cleanup Verification
 
-Conversion and frame-capture operations use temporary output files.
+Conversion, audio, and frame-capture operations use temporary output files.
 
 Tests shall confirm that:
 
@@ -518,7 +559,7 @@ After every meaningful script change, run:
 ./test/smoke-test.sh
 ```
 
-The current suite covers 37 cases, including:
+The current suite covers 39 cases, including:
 
 - explicit operation selection,
 - option conflicts,
@@ -536,9 +577,11 @@ The current suite covers 37 cases, including:
 - post-conversion H.264 verification,
 - still-image plus audio creation,
 - video plus replacement-audio creation,
-- H.264/AAC verification for audio operations,
+- H.264/AAC verification for audio-addition operations,
 - default audio-derived basename checking,
-- still-image detection independent of filename extension.
+- still-image detection independent of filename extension,
+- MP3 audio extraction,
+- MP3 codec verification.
 
 Manual regression testing should additionally include representative files with and without audio and at least one long-duration source when hour-boundary behavior is relevant.
 
