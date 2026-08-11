@@ -8,7 +8,7 @@ clear_metadata=false
 metadata_args=()
 positional_args=()
 force=false
-recode=false
+reencode=false
 
 fps=
 cfr=false
@@ -38,7 +38,7 @@ Arguments:
   OUTPUT                   Optional output path or multi-frame output base
 
 Operations:
-  --reencode                Recode input as standardized H.264/AAC MP4
+  --reencode                Re-ecode input as standardized H.264/AAC MP4
   --show-metadata           Display input metadata and exit
   --frame TIME              Capture JPEG frame(s) starting at [[h:]m:]s[.ms]
 
@@ -342,7 +342,7 @@ parse_args() {
                 shift
                 ;;
             --reencode)
-                recode=true
+                reencode=true
                 shift
                 ;;
             --*=*)
@@ -607,7 +607,7 @@ multi_frame_output_base() {
 parse_args "$@"
 
 operation_count=0
-[ "$recode" = false ] || operation_count=$((operation_count + 1))
+[ "$reencode" = false ] || operation_count=$((operation_count + 1))
 [ "$show_metadata" = false ] || operation_count=$((operation_count + 1))
 [ -z "$frame_time" ] || operation_count=$((operation_count + 1))
 
