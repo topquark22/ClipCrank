@@ -90,20 +90,18 @@ mkdir -p tmp
 sample_video="examples/Big_Buck_Bunny_720_10s_1MB.webm"
 reencoded_video="tmp/Big_Buck_Bunny_720_10s_1MB.mp4"
 
-rm -f "$reencoded_video"
 if [ -f "$sample_video" ] && [ "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$sample_video" | tr -d '\r')" = "vp9" ]; then
     pass "example video should use VP9 codec"
 else
     fail "example video should use VP9 codec"
 fi
-if "$target_script" --reencode "$sample_video" "$reencoded_video" >/dev/null 2>&1 && [ -f "$reencoded_video" ]; then
+if "$target_script" --force --reencode "$sample_video" "$reencoded_video" >/dev/null 2>&1 && [ -f "$reencoded_video" ]; then
     pass "example VP9 video should re-encode successfully"
 else
     fail "example VP9 video should re-encode successfully"
 fi
 if [ -f "$reencoded_video" ] && [ "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$reencoded_video" | tr -d '\r')" = "h264" ]; then
     pass "re-encoded example video should use H.264 codec"
-    rm -f "$reencoded_video"
 else
     fail "re-encoded example video should use H.264 codec"
 fi
@@ -111,8 +109,7 @@ fi
 sample_audio="examples/bah.wav"
 replaced_audio_video="tmp/Big_Buck_Bunny_replace_audio.mp4"
 
-rm -f "$replaced_audio_video"
-if "$target_script" --replace-audio "$sample_video" "$sample_audio" "$replaced_audio_video" >/dev/null 2>&1 && [ -f "$replaced_audio_video" ]; then
+if "$target_script" --force --replace-audio "$sample_video" "$sample_audio" "$replaced_audio_video" >/dev/null 2>&1 && [ -f "$replaced_audio_video" ]; then
     pass "replace audio should create output video"
 else
     fail "replace audio should create output video"
@@ -124,7 +121,6 @@ else
 fi
 if [ -f "$replaced_audio_video" ] && [ "$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$replaced_audio_video" | tr -d '\r')" = "aac" ]; then
     pass "replace audio output should use AAC audio"
-    rm -f "$replaced_audio_video"
 else
     fail "replace audio output should use AAC audio"
 fi
