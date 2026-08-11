@@ -9,6 +9,7 @@ metadata_args=()
 positional_args=()
 force=false
 reencode=false
+replace_audio=false
 
 fps=
 cfr=false
@@ -39,6 +40,7 @@ Arguments:
 
 Operations:
   --reencode                Re-encode input as standardized H.264/AAC MP4
+  --replace-audio           Replace video audio: VIDEO AUDIO [OUTPUT]
   --show-metadata           Display input metadata and exit
   --frame TIME              Capture JPEG frame(s) starting at [[h:]m:]s[.ms]
 
@@ -64,6 +66,7 @@ Options:
 Examples:
   $progname --reencode old-video.avi
   $progname --reencode -f input.mov output.mp4
+  $progname --replace-audio input.mp4 soundtrack.wav output.mp4
   $progname --show-metadata input.mov
   $progname --reencode --start 12.500 --end 2:05 input.mov clip.mp4
   $progname --frame 1:23.500 input.mp4
@@ -345,6 +348,10 @@ parse_args() {
                 reencode=true
                 shift
                 ;;
+            --replace-audio)
+                replace_audio=true
+                shift
+                ;;
             --*=*)
                 reject_equals_option "${1%%=*}"
                 ;;
@@ -586,6 +593,40 @@ EOF
         "$tmp_output"
 }
 
+run_replace_audio() {
+    encoder=$1
+    video_input=$2
+    audio_input=$3
+    tmp_output=$4
+
+    encoder_args=()
+    while IFS= read -r arg; do
+        encoder_args+=( "$arg" )
+    done <<EOF
+$(video_encoder_args "$encoder")
+EOF
+
+    ffmpeg \
+        -hide_banner \
+        -loglevel error \
+        -y \
+        -fflags +genpts \
+        -i "$video_input" \
+        -i "$audio_input" \
+        -map 0:v:0 \
+        -map 1:a:0 \
+        -dn \
+        -sn \
+        "${encoder_args[@]}" \
+        -pix_fmt yuv420p \
+        -vf "$(build_video_filters)" \
+        -movflags +faststart \
+        -c:a aac \
+        -b:a 192k \
+        -f mp4 \
+        "$tmp_output"
+}
+
 multi_frame_output_base() {
     input=$1
     requested=${2:-}
@@ -608,6 +649,7 @@ parse_args "$@"
 
 operation_count=0
 [ "$reencode" = false ] || operation_count=$((operation_count + 1))
+[ "$replace_audio" = false ] || operation_count=$((operation_count + 1))
 [ "$show_metadata" = false ] || operation_count=$((operation_count + 1))
 [ -z "$frame_time" ] || operation_count=$((operation_count + 1))
 
@@ -621,13 +663,25 @@ if [ "$operation_count" -gt 1 ]; then
     exit 2
 fi
 
-if [ "${#positional_args[@]}" -lt 1 ] || [ "${#positional_args[@]}" -gt 2 ]; then
-    usage >&2
-    exit 2
+if [ "$replace_audio" = true ]; then
+    if [ "${#positional_args[@]}" -lt 2 ] || [ "${#positional_args[@]}" -gt 3 ]; then
+        usage >&2
+        exit 2
+    fi
+else
+    if [ "${#positional_args[@]}" -lt 1 ] || [ "${#positional_args[@]}" -gt 2 ]; then
+        usage >&2
+        exit 2
+    fi
 fi
 
 input=${positional_args[0]}
 requested_output=${positional_args[1]:-}
+
+if [ "$replace_audio" = true ]; then
+    audio_input=${positional_args[1]}
+    requested_output=${positional_args[2]:-}
+fi
 
 if [ "$show_metadata" = true ]; then
     if [ -n "$requested_output" ]; then
@@ -686,6 +740,70 @@ fi
 if [ ! -r "$input" ]; then
     error "input file is not readable: $input"
     exit 1
+fi
+
+if [ "$replace_audio" = true ]; then
+    if [ ! -e "$audio_input" ]; then
+        error "audio file not found: $audio_input"
+        exit 1
+    fi
+
+    if [ ! -f "$audio_input" ]; then
+        error "audio path is not a regular file: $audio_input"
+        exit 1
+    fi
+
+    if [ ! -r "$audio_input" ]; then
+        error "audio file is not readable: $audio_input"
+        exit 1
+    fi
+
+    output=${requested_output:-$(derive_video_output_path "$input")}
+
+    if [ "$input" = "$output" ] || [ "$audio_input" = "$output" ]; then
+        error "input and output paths must be different"
+        exit 1
+    fi
+
+    if [ "$force" = false ] && [ -e "$output" ]; then
+        error "output file already exists: $output"
+        exit 1
+    fi
+
+    if ! have_aac_encoder; then
+        error "AAC encoder not found in ffmpeg"
+        exit 1
+    fi
+
+    case "$output" in
+        *.mp4) tmp_output="${output%.mp4}.part.mp4" ;;
+        *)     tmp_output="${output}.part.mp4" ;;
+    esac
+
+    if ! video_encoder=$(select_video_encoder); then
+        error "no supported H.264 encoder found in ffmpeg"
+        error "tried: libx264, libopenh264, h264_nvenc, h264_qsv, h264_amf, h264_mf, h264_d3d12va, h264_vulkan, h264_videotoolbox"
+        exit 1
+    fi
+
+    info "using video encoder: $video_encoder"
+    info "replacing audio with: $audio_input"
+
+    cleanup() {
+        [ ! -e "$tmp_output" ] || rm -f "$tmp_output"
+    }
+
+    trap cleanup EXIT INT TERM HUP
+
+    if ! run_replace_audio "$video_encoder" "$input" "$audio_input" "$tmp_output"; then
+        error "audio replacement failed"
+        exit 1
+    fi
+
+    mv -f -- "$tmp_output" "$output"
+    trap - EXIT INT TERM HUP
+    printf 'created: %s\n' "$output"
+    exit 0
 fi
 
 if [ -n "$frame_time" ] && [ -n "$frame_interval" ]; then
