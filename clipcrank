@@ -10,6 +10,7 @@ positional_args=()
 force=false
 reencode=false
 add_audio=false
+extract_audio=false
 
 fps=
 cfr=false
@@ -41,6 +42,7 @@ Arguments:
 Operations:
   --reencode                Re-encode input as standardized H.264/AAC MP4
   --add-audio               Add or replace audio: VIDEO|IMAGE AUDIO [OUTPUT]
+  --extract-audio           Extract audio as MP3
   --show-metadata           Display input metadata and exit
   --frame TIME              Capture JPEG frame(s) starting at [[h:]m:]s[.ms]
 
@@ -68,6 +70,7 @@ Examples:
   $progname --reencode -f input.mov output.mp4
   $progname --add-audio input.mp4 soundtrack.wav output.mp4
   $progname --add-audio image.jpg soundtrack.wav output.mp4
+  $progname --extract-audio input.mp4 output.mp3
   $progname --show-metadata input.mov
   $progname --reencode --start 12.500 --end 2:05 input.mov clip.mp4
   $progname --frame 1:23.500 input.mp4
@@ -136,6 +139,15 @@ derive_video_output_path() {
     case "$input" in
         *.*) printf '%s\n' "${input%.*}.mp4" ;;
         *)   printf '%s\n' "${input}.mp4" ;;
+    esac
+}
+
+derive_audio_output_path() {
+    input=$1
+
+    case "$input" in
+        *.*) printf '%s\n' "${input%.*}.mp3" ;;
+        *)   printf '%s\n' "${input}.mp3" ;;
     esac
 }
 
@@ -395,6 +407,10 @@ parse_args() {
                 add_audio=true
                 shift
                 ;;
+            --extract-audio)
+                extract_audio=true
+                shift
+                ;;
             --*=*)
                 reject_equals_option "${1%%=*}"
                 ;;
@@ -512,6 +528,21 @@ select_video_encoder() {
         h264_d3d12va \
         h264_vulkan \
         h264_videotoolbox
+    do
+        if have_encoder "$encoder"; then
+            printf '%s\n' "$encoder"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+select_mp3_encoder() {
+    for encoder in \
+        libmp3lame \
+        libshine \
+        mp3_mf
     do
         if have_encoder "$encoder"; then
             printf '%s\n' "$encoder"
@@ -696,6 +727,26 @@ EOF
         "$tmp_output"
 }
 
+run_extract_audio() {
+    encoder=$1
+    input=$2
+    tmp_output=$3
+
+    ffmpeg \
+        -hide_banner \
+        -loglevel error \
+        -y \
+        -i "$input" \
+        -map 0:a:0 \
+        -vn \
+        -dn \
+        -sn \
+        -c:a "$encoder" \
+        -b:a 192k \
+        -f mp3 \
+        "$tmp_output"
+}
+
 multi_frame_output_base() {
     input=$1
     requested=${2:-}
@@ -719,6 +770,7 @@ parse_args "$@"
 operation_count=0
 [ "$reencode" = false ] || operation_count=$((operation_count + 1))
 [ "$add_audio" = false ] || operation_count=$((operation_count + 1))
+[ "$extract_audio" = false ] || operation_count=$((operation_count + 1))
 [ "$show_metadata" = false ] || operation_count=$((operation_count + 1))
 [ -z "$frame_time" ] || operation_count=$((operation_count + 1))
 
@@ -809,6 +861,59 @@ fi
 if [ ! -r "$input" ]; then
     error "input file is not readable: $input"
     exit 1
+fi
+
+if [ "$extract_audio" = true ]; then
+    if [ -n "$clip_start" ] || [ -n "$clip_end" ] || [ -n "$fps" ] || [ "$cfr" = true ] || [ "$preserve_metadata" = true ] || [ "$clear_metadata" = true ] || [ "${#metadata_args[@]}" -gt 0 ]; then
+        error "--extract-audio cannot be combined with video or metadata options"
+        exit 2
+    fi
+
+    output=${requested_output:-$(derive_audio_output_path "$input")}
+
+    case "$output" in
+        *.mp3) ;;
+        *)
+            error "audio output must use .mp3"
+            exit 2
+            ;;
+    esac
+
+    if [ "$input" = "$output" ]; then
+        error "input and output paths must be different"
+        exit 1
+    fi
+
+    if [ "$force" = false ] && [ -e "$output" ]; then
+        error "output file already exists: $output"
+        exit 1
+    fi
+
+    if ! audio_encoder=$(select_mp3_encoder); then
+        error "no supported MP3 encoder found in ffmpeg"
+        error "tried: libmp3lame, libshine, mp3_mf"
+        exit 1
+    fi
+
+    tmp_output="${output%.mp3}.part.mp3"
+
+    info "using audio encoder: $audio_encoder"
+
+    cleanup() {
+        [ ! -e "$tmp_output" ] || rm -f "$tmp_output"
+    }
+
+    trap cleanup EXIT INT TERM HUP
+
+    if ! run_extract_audio "$audio_encoder" "$input" "$tmp_output"; then
+        error "audio extraction failed"
+        exit 1
+    fi
+
+    mv -f -- "$tmp_output" "$output"
+    trap - EXIT INT TERM HUP
+    printf 'created: %s\n' "$output"
+    exit 0
 fi
 
 if [ "$add_audio" = true ]; then
