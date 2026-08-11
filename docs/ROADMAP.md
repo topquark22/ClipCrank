@@ -25,6 +25,7 @@ ClipCrank currently provides:
 - Metadata inspection with `--show-metadata`.
 - Metadata preservation, clearing, and explicit metadata editing.
 - Adding or replacing audio with `--add-audio` for either video input or JPEG/PNG still-image input.
+- For still-image `--add-audio`, the image is looped for the duration of the supplied audio and the default output basename is derived from the audio filename.
 - Safe overwrite handling with `--force`.
 
 ## Near-Term Priorities
@@ -267,4 +268,4 @@ New operations should generally include:
 - `ffprobe` verification of generated output properties
 - tests for Windows/Cygwin interoperability where native Windows `ffmpeg` or `ffprobe` behavior differs from POSIX tools
 
-The committed Big Buck Bunny VP9 WebM sample can serve as a canonical real-video fixture for future codec and container tests.
+The committed Big Buck Bunny VP9 WebM, Lenna PNG, and `bah.wav` files can serve as canonical real-media fixtures for future video, image, and audio tests.
