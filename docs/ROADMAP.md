@@ -51,7 +51,7 @@ The replacement audio input may use any audio format that the installed `ffmpeg`
 Possible interface:
 
 ```sh
-clipcrank --replace-audio soundtrack.wav input.mp4 output.mp4
+clipcrank --replace-audio input.mp4 soundtrack.wav output.mp4
 ```
 
 ### 3. Remove Audio
