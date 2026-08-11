@@ -126,6 +126,19 @@ else
     fail "image add-audio output should use AAC audio"
 fi
 
+extracted_audio="tmp/bah.mp3"
+
+if "$target_script" --force --extract-audio "$created_video" >/dev/null 2>&1 && [ -f "$extracted_audio" ]; then
+    pass "extract audio should create default MP3 output"
+else
+    fail "extract audio should create default MP3 output"
+fi
+if [ -f "$extracted_audio" ] && [ "$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$extracted_audio" | tr -d '\r')" = "mp3" ]; then
+    pass "extracted audio should use MP3 codec"
+else
+    fail "extracted audio should use MP3 codec"
+fi
+
 format_agnostic_image="tmp/lenna.still"
 format_agnostic_video="tmp/lenna_still_bah.mp4"
 cp -f "$sample_image" "$format_agnostic_image"
