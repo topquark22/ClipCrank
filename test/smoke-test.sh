@@ -106,23 +106,24 @@ else
     fail "re-encoded example video should use H.264 codec"
 fi
 
+sample_image="examples/lenna.png"
 sample_audio="examples/bah.wav"
-replaced_audio_video="tmp/Big_Buck_Bunny_replace_audio.mp4"
+created_video="tmp/lenna_bah.mp4"
 
-if "$target_script" --force --replace-audio "$sample_video" "$sample_audio" "$replaced_audio_video" >/dev/null 2>&1 && [ -f "$replaced_audio_video" ]; then
-    pass "replace audio should create output video"
+if "$target_script" --force --create-from "$sample_image" "$sample_audio" "$created_video" >/dev/null 2>&1 && [ -f "$created_video" ]; then
+    pass "create from image and audio should create output video"
 else
-    fail "replace audio should create output video"
+    fail "create from image and audio should create output video"
 fi
-if [ -f "$replaced_audio_video" ] && [ "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$replaced_audio_video" | tr -d '\r')" = "h264" ]; then
-    pass "replace audio output should use H.264 video"
+if [ -f "$created_video" ] && [ "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$created_video" | tr -d '\r')" = "h264" ]; then
+    pass "create-from output should use H.264 video"
 else
-    fail "replace audio output should use H.264 video"
+    fail "create-from output should use H.264 video"
 fi
-if [ -f "$replaced_audio_video" ] && [ "$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$replaced_audio_video" | tr -d '\r')" = "aac" ]; then
-    pass "replace audio output should use AAC audio"
+if [ -f "$created_video" ] && [ "$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$created_video" | tr -d '\r')" = "aac" ]; then
+    pass "create-from output should use AAC audio"
 else
-    fail "replace audio output should use AAC audio"
+    fail "create-from output should use AAC audio"
 fi
 
 say; say "Summary:"; say "  Passed: $pass_count"; say "  Failed: $fail_count"
