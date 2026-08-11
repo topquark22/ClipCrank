@@ -103,7 +103,7 @@ No such file or directory
 
 even though Cygwin itself can see and list the file.
 
-Repository-relative paths avoid this problem and are the recommended approach when using native Windows FFmpeg from Cygwin. For example, from the ClipCrank repository root:
+Relative paths avoid this problem and are the recommended approach when using native Windows FFmpeg from Cygwin. For example, from the ClipCrank repository root:
 
 ```sh
 ./clipcrank --info examples/Big_Buck_Bunny_720_10s_1MB.webm
