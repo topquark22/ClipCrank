@@ -1,14 +1,16 @@
 # ClipCrank
 
-`clipcrank` converts many kinds of video files into standardized MP4 output using `ffmpeg`. It can also create clips based on starting and/or ending timestamps, and capture one or more JPEG still frames from a video.
+`clipcrank` converts many kinds of video files into standardized MP4 output using `ffmpeg`. It can also create clips based on starting and/or ending timestamps, capture one or more JPEG still frames from a video, and add or replace audio using either a video or still image as the visual source.
 
-`clipcrank` is a wrapper for `ffmpeg`, intended to simplify common `ffmpeg` operations and provide a more intuitive command-line interface. It does not replace `ffmpeg`; instead, it handles the underlying invocation and options for common video conversion, clipping, and frame-capture tasks.
+`clipcrank` is a wrapper for `ffmpeg`, intended to simplify common `ffmpeg` operations and provide a more intuitive command-line interface. It does not replace `ffmpeg`; instead, it handles the underlying invocation and options for common video conversion, clipping, frame-capture, metadata, and audio tasks.
 
 ## Features
 
 - Converts video to H.264/AAC MP4
 - Creates clips using optional start/end times
 - Captures single or multiple JPEG frames
+- Adds or replaces audio on video input
+- Creates H.264/AAC MP4 video from a JPEG/PNG still image plus audio
 - JPEG quality defaults to 90 and is configurable
 - Refuses to overwrite existing output by default
 - Supports `-f` / `--force` to overwrite existing output
@@ -76,6 +78,7 @@ An operation must be selected explicitly. If no operation is specified, `clipcra
 The available operations currently are:
 
 - `--reencode` — recode video as standardized H.264/AAC MP4
+- `--add-audio` — add or replace audio using a video or JPEG/PNG still image as input
 - `--show-metadata` — display metadata and exit
 - `--frame TIME` — capture one or more JPEG frames
 
@@ -90,6 +93,25 @@ Use `--reencode` to convert an input video into standardized MP4 output:
 ./clipcrank --reencode input.mov output.mp4
 ```
 
+### Adding or replacing audio
+
+Use `--add-audio` with a video input to add or replace its audio track:
+
+```sh
+./clipcrank --add-audio input.mp4 soundtrack.wav output.mp4
+```
+
+The replacement audio may use any format that the installed `ffmpeg` can decode. Output is standardized H.264/AAC MP4.
+
+`--add-audio` also accepts a JPEG or PNG still image as the visual input:
+
+```sh
+./clipcrank --add-audio image.jpg soundtrack.wav output.mp4
+./clipcrank --add-audio image.png soundtrack.mp3 output.mp4
+```
+
+The still image is displayed for the duration of the audio. If the output filename is omitted for still-image input, the default output basename is derived from the audio filename with an `.mp4` extension.
+
 ### Overwriting existing files
 
 By default, `clipcrank` refuses to overwrite an existing output file. Use `-f` or `--force` to allow replacement:
@@ -100,7 +122,7 @@ By default, `clipcrank` refuses to overwrite an existing output file. Use `-f` o
 ./clipcrank -f --frame 10 --interval 5 --count 4 input.mp4
 ```
 
-This applies to recoding, single-frame capture, and every output in multi-frame capture. Temporary files are still used, so the existing final output is replaced only after the new output has been successfully created.
+This applies to recoding, audio operations, single-frame capture, and every output in multi-frame capture. Temporary files are still used, so the existing final output is replaced only after the new output has been successfully created.
 
 ## Metadata
 
@@ -185,11 +207,11 @@ Use `--reencode` with `--fps N` to convert output video to an explicit frame rat
 
 ## Frame-capture option compatibility
 
-`--frame` cannot be combined with `--reencode`, `--show-metadata`, `--start`, `--end`, `--fps`, `--cfr`, or MP4 metadata options.
+`--frame` cannot be combined with `--reencode`, `--add-audio`, `--show-metadata`, `--start`, `--end`, `--fps`, `--cfr`, or MP4 metadata options.
 
 ## Testing
 
-The repository includes `TEST_PLAN.md` and `test/smoke-test.sh`.
+The repository includes `docs/TEST_PLAN.md` and `test/smoke-test.sh`.
 
 ```sh
 chmod +x test/smoke-test.sh
