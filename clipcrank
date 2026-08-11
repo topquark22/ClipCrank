@@ -88,6 +88,47 @@ have_command() {
     command -v "$1" >/dev/null 2>&1
 }
 
+classify_visual_input() {
+    input=$1
+
+    if ! have_command ffprobe; then
+        error "ffprobe is not installed or not on PATH"
+        exit 127
+    fi
+
+    kind=$(
+        ffprobe \
+            -v error \
+            -select_streams v:0 \
+            -show_entries frame=media_type \
+            -of csv=p=0 \
+            "$input" 2>/dev/null |
+        tr -d '\r' |
+        awk '
+            $0 == "video" {
+                count++
+                if (count >= 2) {
+                    print "video"
+                    exit
+                }
+            }
+            END {
+                if (count == 1) {
+                    print "image"
+                }
+            }
+        '
+    )
+
+    case "$kind" in
+        image|video) printf '%s\n' "$kind" ;;
+        *)
+            error "input is not a supported video or still image: $input"
+            exit 1
+            ;;
+    esac
+}
+
 derive_video_output_path() {
     input=$1
 
@@ -623,7 +664,7 @@ EOF
     first_input_args=()
     shortest_args=()
     if [ "$input_is_image" = true ]; then
-        first_input_args=( -loop 1 )
+        first_input_args=( -stream_loop -1 )
         shortest_args=( -shortest )
     else
         first_input_args=( -fflags +genpts )
@@ -770,10 +811,9 @@ if [ ! -r "$input" ]; then
 fi
 
 if [ "$add_audio" = true ]; then
+    input_kind=$(classify_visual_input "$input")
     input_is_image=false
-    case "$input" in
-        *.jpg|*.jpeg|*.png|*.JPG|*.JPEG|*.PNG) input_is_image=true ;;
-    esac
+    [ "$input_kind" != image ] || input_is_image=true
 
     if [ ! -e "$audio_input" ]; then
         error "audio file not found: $audio_input"
