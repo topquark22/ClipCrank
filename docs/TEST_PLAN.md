@@ -16,6 +16,8 @@ The test plan aims to confirm that `clipcrank`:
 - re-encodes supported input media into standardized H.264/AAC MP4 output,
 - selects a working H.264 encoder from the local `ffmpeg` environment,
 - uses AAC audio when audio is present,
+- adds or replaces audio on video input,
+- creates H.264/AAC MP4 output from a JPEG/PNG still image plus audio,
 - creates clips using a start time, end time, or both,
 - accepts timestamps in `[[h:]m:]s[.ms]` form,
 - captures single JPEG frames,
@@ -25,7 +27,7 @@ The test plan aims to confirm that `clipcrank`:
 - supports configurable JPEG quality,
 - supports explicit frame-rate conversion and constant-frame-rate output,
 - displays metadata using `ffprobe`,
-- supports preserving, clearing, and setting metadata during re-encoding,
+- supports preserving, clearing, and setting metadata during generated MP4 output,
 - avoids overwriting existing output by default,
 - overwrites existing output only when `-f` or `--force` is supplied,
 - succeeds on old or awkward media when `ffmpeg` can decode it,
@@ -51,7 +53,7 @@ Because encoder availability differs by environment, tests focus on successful o
 Testing combines:
 
 1. **Automated smoke testing** with `test/smoke-test.sh`.
-2. **Real-media integration testing** using the committed sample video under `examples/`.
+2. **Real-media integration testing** using the committed sample files under `examples/`.
 3. **Manual media testing** using representative files.
 4. **Output inspection** with `ffprobe` for codecs, duration, metadata, and stream properties.
 
@@ -61,7 +63,9 @@ The smoke test should normally be run from the repository root:
 ./test/smoke-test.sh
 ```
 
-The current smoke suite contains 33 tests.
+The current smoke suite contains 36 tests.
+
+Generated integration-test artifacts are written under `tmp/` and retained for manual inspection and UAT.
 
 ## Operations
 
@@ -69,6 +73,7 @@ ClipCrank currently exposes these primary operations:
 
 ```text
 --reencode
+--add-audio
 --show-metadata
 --frame TIME
 ```
@@ -120,7 +125,7 @@ vp9
 Re-encode it with:
 
 ```sh
-./clipcrank --reencode \
+./clipcrank --force --reencode \
   examples/Big_Buck_Bunny_720_10s_1MB.webm \
   tmp/Big_Buck_Bunny_720_10s_1MB.mp4
 ```
@@ -146,6 +151,56 @@ When native Windows `ffprobe` is used under Cygwin, its output may contain carri
 ```sh
 tr -d '\r'
 ```
+
+## Add Audio Tests
+
+The repository contains the audio and still-image fixtures:
+
+```text
+examples/bah.wav
+examples/lenna.png
+```
+
+### Still image plus audio
+
+Use the still image as the visual input and `bah.wav` as the audio input:
+
+```sh
+./clipcrank --force --add-audio \
+  examples/lenna.png \
+  examples/bah.wav \
+  tmp/bah.mp4
+```
+
+Expected:
+- output file exists,
+- output video codec is H.264,
+- output audio codec is AAC,
+- the still image remains visible for the duration of the audio,
+- the generated output is playable.
+
+The smoke test keeps the source fixtures under `examples/`, writes the generated artifact under `tmp/`, and verifies that the output basename is the audio input basename with an `.mp4` extension:
+
+```text
+bah.mp4
+```
+
+### Video plus replacement audio
+
+Use the Big Buck Bunny fixture as the video input and `bah.wav` as the replacement audio:
+
+```sh
+./clipcrank --force --add-audio \
+  examples/Big_Buck_Bunny_720_10s_1MB.webm \
+  examples/bah.wav \
+  tmp/Big_Buck_Bunny_add_audio.mp4
+```
+
+Expected:
+- output file exists,
+- output video codec is H.264,
+- output audio codec is AAC,
+- the output uses the audio stream supplied by `bah.wav`.
 
 ## Clip Timestamp Formats
 
@@ -356,7 +411,7 @@ Expected: failure without modifying the existing file.
 
 Expected: successful replacement after the new output has been created successfully.
 
-The same behavior applies to single-frame and multiple-frame output.
+The same behavior applies to `--add-audio`, single-frame, and multiple-frame output.
 
 Input and output paths that refer to the same file shall be rejected even when `--force` is supplied.
 
@@ -427,11 +482,11 @@ ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,pix_fmt,wid
 ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=nw=1 output.mp4
 ```
 
-For standard re-encoded output, verify:
+For standard generated video output, verify:
 
 - MP4-compatible container,
 - H.264 video,
-- AAC audio when audio exists,
+- AAC audio when audio exists or is supplied,
 - `yuv420p` pixel format,
 - even-numbered output dimensions.
 
@@ -441,14 +496,14 @@ Small differences at frame or audio-sample boundaries are acceptable.
 
 ## Cleanup Verification
 
-Conversion and frame-capture operations use temporary output files.
+Conversion, `--add-audio`, and frame-capture operations use temporary output files.
 
 Tests shall confirm that:
 
 - partial temporary files are removed after failure or interruption,
 - final output paths are populated only after successful generation,
 - integration-test output may intentionally be retained after failure for diagnosis,
-- successful integration-test output may be removed after verification.
+- successful integration-test output under `tmp/` is retained for manual inspection and UAT.
 
 ## Regression Testing
 
@@ -458,7 +513,7 @@ After every meaningful script change, run:
 ./test/smoke-test.sh
 ```
 
-The current suite covers 33 cases, including:
+The current suite covers 36 cases, including:
 
 - explicit operation selection,
 - option conflicts,
@@ -473,7 +528,11 @@ The current suite covers 33 cases, including:
 - overwrite protection,
 - real VP9 fixture verification,
 - real VP9-to-H.264 re-encoding,
-- post-conversion H.264 verification.
+- post-conversion H.264 verification,
+- still-image plus audio generation,
+- video plus replacement-audio generation,
+- H.264/AAC verification of `--add-audio` output,
+- audio-based output basename verification for still-image input.
 
 Manual regression testing should additionally include representative files with and without audio and at least one long-duration source when hour-boundary behavior is relevant.
 
@@ -487,4 +546,4 @@ Native Windows `ffprobe` may emit CRLF line endings. Automated codec comparisons
 
 ## Conclusion
 
-The priority is confidence that ClipCrank translates simple user-facing operations into correct `ffmpeg` behavior, produces predictable and playable output, preserves safe overwrite semantics, and handles timestamps, filenames, codecs, and metadata consistently across supported environments.
+The priority is confidence that ClipCrank translates simple user-facing operations into correct `ffmpeg` behavior, produces predictable and playable output, preserves safe overwrite semantics, and handles timestamps, filenames, codecs, metadata, and audio operations consistently across supported environments.
