@@ -9,7 +9,7 @@ metadata_args=()
 positional_args=()
 force=false
 reencode=false
-replace_audio=false
+create_from=false
 
 fps=
 cfr=false
@@ -40,7 +40,7 @@ Arguments:
 
 Operations:
   --reencode                Re-encode input as standardized H.264/AAC MP4
-  --replace-audio           Replace video audio: VIDEO AUDIO [OUTPUT]
+  --create-from             Create video from still image and audio: IMAGE AUDIO [OUTPUT]
   --show-metadata           Display input metadata and exit
   --frame TIME              Capture JPEG frame(s) starting at [[h:]m:]s[.ms]
 
@@ -66,7 +66,7 @@ Options:
 Examples:
   $progname --reencode old-video.avi
   $progname --reencode -f input.mov output.mp4
-  $progname --replace-audio input.mp4 soundtrack.wav output.mp4
+  $progname --create-from image.jpg soundtrack.wav output.mp4
   $progname --show-metadata input.mov
   $progname --reencode --start 12.500 --end 2:05 input.mov clip.mp4
   $progname --frame 1:23.500 input.mp4
@@ -348,8 +348,8 @@ parse_args() {
                 reencode=true
                 shift
                 ;;
-            --replace-audio)
-                replace_audio=true
+            --create-from)
+                create_from=true
                 shift
                 ;;
             --*=*)
@@ -593,9 +593,9 @@ EOF
         "$tmp_output"
 }
 
-run_replace_audio() {
+run_create_from() {
     encoder=$1
-    video_input=$2
+    image_input=$2
     audio_input=$3
     tmp_output=$4
 
@@ -606,23 +606,37 @@ run_replace_audio() {
 $(video_encoder_args "$encoder")
 EOF
 
+    metadata_mode_args=()
+    if [ "$clear_metadata" = true ]; then
+        metadata_mode_args=( -map_metadata -1 )
+    fi
+
+    cfr_args=()
+    if [ "$cfr" = true ]; then
+        cfr_args=( -vsync cfr )
+    fi
+
     ffmpeg \
         -hide_banner \
         -loglevel error \
         -y \
-        -fflags +genpts \
-        -i "$video_input" \
+        -loop 1 \
+        -i "$image_input" \
         -i "$audio_input" \
         -map 0:v:0 \
         -map 1:a:0 \
         -dn \
         -sn \
+        "${cfr_args[@]}" \
+        "${metadata_mode_args[@]}" \
+        "${metadata_args[@]}" \
         "${encoder_args[@]}" \
         -pix_fmt yuv420p \
         -vf "$(build_video_filters)" \
         -movflags +faststart \
         -c:a aac \
         -b:a 192k \
+        -shortest \
         -f mp4 \
         "$tmp_output"
 }
@@ -649,7 +663,7 @@ parse_args "$@"
 
 operation_count=0
 [ "$reencode" = false ] || operation_count=$((operation_count + 1))
-[ "$replace_audio" = false ] || operation_count=$((operation_count + 1))
+[ "$create_from" = false ] || operation_count=$((operation_count + 1))
 [ "$show_metadata" = false ] || operation_count=$((operation_count + 1))
 [ -z "$frame_time" ] || operation_count=$((operation_count + 1))
 
@@ -663,7 +677,7 @@ if [ "$operation_count" -gt 1 ]; then
     exit 2
 fi
 
-if [ "$replace_audio" = true ]; then
+if [ "$create_from" = true ]; then
     if [ "${#positional_args[@]}" -lt 2 ] || [ "${#positional_args[@]}" -gt 3 ]; then
         usage >&2
         exit 2
@@ -678,7 +692,7 @@ fi
 input=${positional_args[0]}
 requested_output=${positional_args[1]:-}
 
-if [ "$replace_audio" = true ]; then
+if [ "$create_from" = true ]; then
     audio_input=${positional_args[1]}
     requested_output=${positional_args[2]:-}
 fi
@@ -742,7 +756,15 @@ if [ ! -r "$input" ]; then
     exit 1
 fi
 
-if [ "$replace_audio" = true ]; then
+if [ "$create_from" = true ]; then
+    case "$input" in
+        *.jpg|*.jpeg|*.png|*.JPG|*.JPEG|*.PNG) ;;
+        *)
+            error "create-from image must use .jpg, .jpeg, or .png"
+            exit 2
+            ;;
+    esac
+
     if [ ! -e "$audio_input" ]; then
         error "audio file not found: $audio_input"
         exit 1
@@ -756,6 +778,16 @@ if [ "$replace_audio" = true ]; then
     if [ ! -r "$audio_input" ]; then
         error "audio file is not readable: $audio_input"
         exit 1
+    fi
+
+    if [ -n "$clip_start" ] || [ -n "$clip_end" ]; then
+        error "--create-from cannot be used with --start or --end"
+        exit 2
+    fi
+
+    if [ "$preserve_metadata" = true ]; then
+        error "--create-from cannot be used with --preserve-metadata"
+        exit 2
     fi
 
     output=${requested_output:-$(derive_video_output_path "$input")}
@@ -787,7 +819,7 @@ if [ "$replace_audio" = true ]; then
     fi
 
     info "using video encoder: $video_encoder"
-    info "replacing audio with: $audio_input"
+    info "creating video from image and audio"
 
     cleanup() {
         [ ! -e "$tmp_output" ] || rm -f "$tmp_output"
@@ -795,8 +827,8 @@ if [ "$replace_audio" = true ]; then
 
     trap cleanup EXIT INT TERM HUP
 
-    if ! run_replace_audio "$video_encoder" "$input" "$audio_input" "$tmp_output"; then
-        error "audio replacement failed"
+    if ! run_create_from "$video_encoder" "$input" "$audio_input" "$tmp_output"; then
+        error "video creation failed"
         exit 1
     fi
 
