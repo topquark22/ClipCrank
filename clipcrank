@@ -8,6 +8,7 @@ clear_metadata=false
 metadata_args=()
 positional_args=()
 force=false
+recode=false
 
 fps=
 cfr=false
@@ -30,11 +31,16 @@ usage() {
     cat <<EOF
 Usage: $progname [OPTIONS] INPUT [OUTPUT]
 
-Convert INPUT video into a standardized H.264/AAC MP4 file, or capture JPEG frames.
+Perform a selected video operation using ffmpeg.
 
 Arguments:
   INPUT                    Path to input video file
   OUTPUT                   Optional output path or multi-frame output base
+
+Operations:
+  --recode                  Recode input as standardized H.264/AAC MP4
+  --show-metadata           Display input metadata and exit
+  --frame TIME              Capture JPEG frame(s) starting at [[h:]m:]s[.ms]
 
 Options:
   -f, --force              Overwrite existing output files
@@ -46,10 +52,8 @@ Options:
   --comment TEXT           Set comment metadata
   --preserve-metadata      Preserve input global metadata before applying edits
   --clear-metadata         Clear input global metadata before applying edits
-  --show-metadata          Display input metadata and exit
   --start TIME             Start output at [[h:]m:]s[.ms]; defaults to input start
   --end TIME               End output at [[h:]m:]s[.ms]; defaults to input end
-  --frame TIME             Capture JPEG frame(s) starting at [[h:]m:]s[.ms]
   --interval TIME          Interval between frames; requires --frame and --count
   --count N                Number of frames to capture; requires --frame and --interval
   --jpeg-quality N         JPEG quality from 1 to 100; default 90
@@ -58,10 +62,10 @@ Options:
   -h, --help               Show this help text
 
 Examples:
-  $progname old-video.avi
-  $progname -f input.mov output.mp4
+  $progname --recode old-video.avi
+  $progname --recode -f input.mov output.mp4
   $progname --show-metadata input.mov
-  $progname --start 12.500 --end 2:05 input.mov clip.mp4
+  $progname --recode --start 12.500 --end 2:05 input.mov clip.mp4
   $progname --frame 1:23.500 input.mp4
   $progname --frame 10 --interval 5 --count 4 input.mp4
   $progname --force --frame 1:00 --interval 10 --count 3 input.mp4 shots.jpg
@@ -337,6 +341,10 @@ parse_args() {
                 force=true
                 shift
                 ;;
+            --recode)
+                recode=true
+                shift
+                ;;
             --*=*)
                 reject_equals_option "${1%%=*}"
                 ;;
@@ -598,6 +606,21 @@ multi_frame_output_base() {
 
 parse_args "$@"
 
+operation_count=0
+[ "$recode" = false ] || operation_count=$((operation_count + 1))
+[ "$show_metadata" = false ] || operation_count=$((operation_count + 1))
+[ -z "$frame_time" ] || operation_count=$((operation_count + 1))
+
+if [ "$operation_count" -eq 0 ]; then
+    usage >&2
+    exit 2
+fi
+
+if [ "$operation_count" -gt 1 ]; then
+    error "only one operation may be specified"
+    exit 2
+fi
+
 if [ "${#positional_args[@]}" -lt 1 ] || [ "${#positional_args[@]}" -gt 2 ]; then
     usage >&2
     exit 2
@@ -612,7 +635,7 @@ if [ "$show_metadata" = true ]; then
         exit 2
     fi
 
-    if [ "$force" = true ] || [ "$preserve_metadata" = true ] || [ "$clear_metadata" = true ] || [ "${#metadata_args[@]}" -gt 0 ] || [ -n "$clip_start" ] || [ -n "$clip_end" ] || [ -n "$frame_time" ] || [ -n "$fps" ] || [ "$cfr" = true ]; then
+    if [ "$force" = true ] || [ "$preserve_metadata" = true ] || [ "$clear_metadata" = true ] || [ "${#metadata_args[@]}" -gt 0 ] || [ -n "$clip_start" ] || [ -n "$clip_end" ] || [ -n "$fps" ] || [ "$cfr" = true ]; then
         error "--show-metadata cannot be combined with output options"
         exit 2
     fi
