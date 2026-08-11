@@ -28,21 +28,10 @@ ClipCrank currently provides:
 - Still-image input is detected from the media itself rather than from a filename-extension whitelist.
 - For still-image `--add-audio`, the image is looped for the duration of the supplied audio and the default output basename is derived from the audio filename.
 - Extracting the first audio stream to MP3 with `--extract-audio`, with `.mp3` default output naming.
+- Removing audio with `--remove-audio`, producing H.264 MP4 output with no audio stream and requiring an explicit output filename.
 - Safe overwrite handling with `--force`.
 
 ## Near-Term Priorities
-
-### 1. Remove Audio
-
-Provide an operation that creates a video without an audio stream.
-
-Possible interface:
-
-```sh
-clipcrank --remove-audio input.mp4 output.mp4
-```
-
-This operation should remove the audio stream rather than merely setting its volume to zero. Output should remain in ClipCrank's standard H.264 MP4 format.
 
 ### Media Information
 
