@@ -10,7 +10,7 @@ The script is intended to be:
 - portable across environments where the required FFmpeg tools are available,
 - and robust enough to handle old or awkward media formats when `ffmpeg` can decode them.
 
-The current implementation supports H.264/AAC MP4 re-encoding, video clipping, JPEG frame capture, metadata inspection and editing, frame-rate control, audio addition or replacement, still-image plus audio video creation, MP3 audio extraction, and safe overwrite handling.
+The current implementation supports H.264/AAC MP4 re-encoding, video clipping, JPEG frame capture, metadata inspection and editing, frame-rate control, audio addition or replacement, still-image plus audio video creation, MP3 audio extraction, audio removal, and safe overwrite handling.
 
 Operations must be selected explicitly. Running the script with an input file but no operation shall print usage information rather than implicitly re-encoding the file.
 
@@ -23,6 +23,7 @@ The script shall support the following operations:
 - `--reencode` to create standardized H.264/AAC MP4 output,
 - `--add-audio` to add or replace audio using video or still-image visual input,
 - `--extract-audio` to extract the first audio stream as MP3,
+- `--remove-audio` to create H.264 MP4 output without an audio stream,
 - `--show-metadata` to display input metadata and exit,
 - `--frame TIME` to capture one or more JPEG still frames.
 
@@ -37,7 +38,8 @@ The script shall:
 - accept one required input path argument,
 - accept one optional output path argument when the selected operation permits output,
 - accept a separate required audio input path for `--add-audio`,
-- derive an output path when no explicit output path is provided,
+- require an explicit output path for `--remove-audio`,
+- derive an output path when no explicit output path is provided and the selected operation permits default naming,
 - reject execution when the wrong number of arguments is provided,
 - reject execution when an input file does not exist,
 - reject execution when an input path is not a regular file,
@@ -46,7 +48,7 @@ The script shall:
 
 For `--add-audio`, the visual input shall be classified using `ffprobe` rather than by filename extension. A single-frame visual input shall be treated as a still image; visual input containing multiple frames shall be treated as video. Input that cannot be classified as either a supported still image or video shall be rejected.
 
-For the planned `--remove-audio` operation, both the input path and output path shall be required. The operation shall not derive a default output filename.
+For `--remove-audio`, both the input path and output path shall be required. The operation shall not derive a default output filename.
 
 ### 3. Output Naming
 
@@ -63,7 +65,7 @@ For `--extract-audio`, when no explicit output path is given, the script shall r
 
 Explicit `--extract-audio` output paths shall use the `.mp3` extension.
 
-For the planned `--remove-audio` operation, an explicit output path shall be mandatory. No default output path shall be generated.
+For `--remove-audio`, an explicit `.mp4` output path shall be mandatory. No default output path shall be generated.
 
 For single-frame capture, when no explicit output path is given, the script shall append a normalized timestamp to the input base name and use a `.jpg` extension.
 
@@ -185,7 +187,25 @@ If the input does not contain a usable audio stream, the operation shall fail wi
 
 `--extract-audio` shall not accept clipping, frame-rate, or metadata options.
 
-### 10. Frame Rate
+### 10. Remove Audio
+
+The script shall support:
+
+```text
+--remove-audio INPUT OUTPUT
+```
+
+Both input and output paths shall be mandatory.
+
+The operation shall omit all audio streams from the output rather than muting them.
+
+The output shall contain the first video stream encoded as H.264 in an MP4 container.
+
+The operation shall omit subtitle and data streams.
+
+`--remove-audio` shall not accept clipping, frame-rate, or metadata options.
+
+### 11. Frame Rate
 
 The script shall support `--fps N` to convert output video to an explicit frame rate.
 
@@ -195,7 +215,7 @@ The script shall support `--cfr` to force constant-frame-rate output while allow
 
 Frame-rate options shall not be accepted with frame-capture operations.
 
-### 11. Video Clipping
+### 12. Video Clipping
 
 The script shall support `--start TIME` and `--end TIME` with `--reencode`.
 
@@ -217,7 +237,7 @@ The script shall:
 
 Clip timestamps are not required to be incorporated automatically into the default video output filename.
 
-### 12. JPEG Frame Capture
+### 13. JPEG Frame Capture
 
 The script shall support capture of a single JPEG frame using:
 
@@ -247,7 +267,7 @@ JPEG quality shall default to 90 when not specified.
 
 Frame capture shall not be accepted with clipping, frame-rate, or metadata-editing options.
 
-### 13. Metadata
+### 14. Metadata
 
 The script shall support display of metadata using:
 
@@ -270,9 +290,9 @@ The script shall support the following metadata controls for re-encoded MP4 outp
 
 `--preserve-metadata` and `--clear-metadata` shall not be accepted together.
 
-Metadata options shall not be accepted with frame capture or `--extract-audio`.
+Metadata options shall not be accepted with frame capture, `--extract-audio`, or `--remove-audio`.
 
-### 14. Dependency Handling
+### 15. Dependency Handling
 
 The script shall require `ffmpeg` to be installed and available on `PATH` for media-writing operations.
 
@@ -282,7 +302,7 @@ The script shall fail clearly when a required executable is unavailable.
 
 Because FFmpeg builds differ by platform and distribution, the script shall adapt to the encoders and decoders exposed by the local FFmpeg installation.
 
-### 15. Messaging and Exit Behavior
+### 16. Messaging and Exit Behavior
 
 The script shall:
 
@@ -293,7 +313,7 @@ The script shall:
 - exit non-zero on failure,
 - exit zero on success.
 
-### 16. Cleanup Behavior
+### 17. Cleanup Behavior
 
 The script shall remove partial temporary output files when an operation fails or is interrupted.
 
@@ -329,6 +349,8 @@ To support this, the script should:
 - use `+faststart`.
 
 Extracted audio should use MP3 for broad compatibility.
+
+Audio-removed video should use H.264 MP4 without an audio stream.
 
 ### 4. Safety
 
@@ -373,6 +395,9 @@ At minimum, testing should cover:
 - extraction of MP3 audio from a generated video containing AAC audio,
 - MP3 codec verification with `ffprobe`,
 - default `.mp3` output naming,
+- mandatory output handling for `--remove-audio`,
+- H.264 verification of `--remove-audio` output,
+- verification that `--remove-audio` output contains no audio stream,
 - missing input handling,
 - invalid input path handling,
 - output-already-exists handling,
@@ -393,7 +418,6 @@ The project roadmap is maintained in `docs/ROADMAP.md`.
 
 Potential future capabilities include:
 
-- audio removal,
 - resizing and scaling,
 - cropping and padding,
 - rotation and flipping,
