@@ -38,7 +38,7 @@ Arguments:
   OUTPUT                   Optional output path or multi-frame output base
 
 Operations:
-  --reencode                Re-ecode input as standardized H.264/AAC MP4
+  --reencode                Re-encode input as standardized H.264/AAC MP4
   --show-metadata           Display input metadata and exit
   --frame TIME              Capture JPEG frame(s) starting at [[h:]m:]s[.ms]
 
