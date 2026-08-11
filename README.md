@@ -25,7 +25,7 @@
 
 Linux and other POSIX-like systems can normally use their native Bash and FFmpeg packages.
 
-Windows does not provide a native POSIX shell environment. To run ClipCrank on Windows, use a POSIX-compatible environment such as Cygwin. Native Windows builds of `ffmpeg` and `ffprobe` may be used from Cygwin and are the recommended configuration tested during ClipCrank development. See `INSTALL.md` for installation instructions and important notes about Cygwin paths when using native Windows FFmpeg executables.
+Windows does not provide a native POSIX shell environment. To run ClipCrank on Windows, use a POSIX-compatible environment such as Cygwin. Native Windows builds of `ffmpeg` and `ffprobe` may be used from Cygwin and are the recommended configuration tested during ClipCrank development. See [INSTALL.md](./INSTALL.md) for installation instructions and important notes about Cygwin paths when using native Windows FFmpeg executables.
 
 No ImageMagick or other image-processing package is required.
 
