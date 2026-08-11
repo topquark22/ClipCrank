@@ -26,6 +26,7 @@ run_expect_failure_message "invalid start timestamp should fail" "start must be 
 run_expect_failure_message "clip end must be later than start" "--end must be later than --start" "$target_script" --reencode --start 60 --end 59.999 "$tmp_dir/missing.flv"
 run_expect_failure_message "clip across hour boundary should pass validation" "input file not found" "$target_script" --reencode --start 59:59 --end 1:00:01 "$tmp_dir/missing.flv"
 run_expect_failure_message "removed trim-seconds option should fail" "unknown option: --trim-seconds" "$target_script" --trim-seconds 0.04 "$tmp_dir/missing.flv"
+run_expect_failure_message "remove audio requires output file" "Usage:" "$target_script" --remove-audio "$tmp_dir/missing.mp4"
 
 run_expect_failure_message "jpeg quality requires frame mode" "--jpeg-quality requires --frame" "$target_script" --jpeg-quality 90 "$tmp_dir/missing.flv"
 run_expect_failure_message "removed frames option should fail" "unknown option: --frames" "$target_script" --frames 20 --interval 5 --count 2 "$tmp_dir/missing.flv"
@@ -137,6 +138,24 @@ if [ -f "$extracted_audio" ] && [ "$(ffprobe -v error -select_streams a:0 -show_
     pass "extracted audio should use MP3 codec"
 else
     fail "extracted audio should use MP3 codec"
+fi
+
+silent_video="tmp/bah-silent.mp4"
+
+if "$target_script" --force --remove-audio "$created_video" "$silent_video" >/dev/null 2>&1 && [ -f "$silent_video" ]; then
+    pass "remove audio should create output video"
+else
+    fail "remove audio should create output video"
+fi
+if [ -f "$silent_video" ] && [ "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$silent_video" | tr -d '\r')" = "h264" ]; then
+    pass "remove audio output should use H.264 video"
+else
+    fail "remove audio output should use H.264 video"
+fi
+if [ -f "$silent_video" ] && [ -z "$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$silent_video" | tr -d '\r')" ]; then
+    pass "remove audio output should contain no audio stream"
+else
+    fail "remove audio output should contain no audio stream"
 fi
 
 format_agnostic_image="tmp/lenna.still"
