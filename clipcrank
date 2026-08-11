@@ -11,6 +11,7 @@ force=false
 reencode=false
 add_audio=false
 extract_audio=false
+remove_audio=false
 
 fps=
 cfr=false
@@ -43,6 +44,7 @@ Operations:
   --reencode                Re-encode input as standardized H.264/AAC MP4
   --add-audio               Add or replace audio: VIDEO|IMAGE AUDIO [OUTPUT]
   --extract-audio           Extract audio as MP3
+  --remove-audio            Remove audio: INPUT OUTPUT
   --show-metadata           Display input metadata and exit
   --frame TIME              Capture JPEG frame(s) starting at [[h:]m:]s[.ms]
 
@@ -71,6 +73,7 @@ Examples:
   $progname --add-audio input.mp4 soundtrack.wav output.mp4
   $progname --add-audio image.jpg soundtrack.wav output.mp4
   $progname --extract-audio input.mp4 output.mp3
+  $progname --remove-audio input.mp4 silent.mp4
   $progname --show-metadata input.mov
   $progname --reencode --start 12.500 --end 2:05 input.mov clip.mp4
   $progname --frame 1:23.500 input.mp4
@@ -411,6 +414,10 @@ parse_args() {
                 extract_audio=true
                 shift
                 ;;
+            --remove-audio)
+                remove_audio=true
+                shift
+                ;;
             --*=*)
                 reject_equals_option "${1%%=*}"
                 ;;
@@ -747,6 +754,36 @@ run_extract_audio() {
         "$tmp_output"
 }
 
+run_remove_audio() {
+    encoder=$1
+    input=$2
+    tmp_output=$3
+
+    encoder_args=()
+    while IFS= read -r arg; do
+        encoder_args+=( "$arg" )
+    done <<EOF
+$(video_encoder_args "$encoder")
+EOF
+
+    ffmpeg \
+        -hide_banner \
+        -loglevel error \
+        -y \
+        -fflags +genpts \
+        -i "$input" \
+        -map 0:v:0 \
+        -an \
+        -dn \
+        -sn \
+        "${encoder_args[@]}" \
+        -pix_fmt yuv420p \
+        -vf "$(build_video_filters)" \
+        -movflags +faststart \
+        -f mp4 \
+        "$tmp_output"
+}
+
 multi_frame_output_base() {
     input=$1
     requested=${2:-}
@@ -771,6 +808,7 @@ operation_count=0
 [ "$reencode" = false ] || operation_count=$((operation_count + 1))
 [ "$add_audio" = false ] || operation_count=$((operation_count + 1))
 [ "$extract_audio" = false ] || operation_count=$((operation_count + 1))
+[ "$remove_audio" = false ] || operation_count=$((operation_count + 1))
 [ "$show_metadata" = false ] || operation_count=$((operation_count + 1))
 [ -z "$frame_time" ] || operation_count=$((operation_count + 1))
 
@@ -786,6 +824,11 @@ fi
 
 if [ "$add_audio" = true ]; then
     if [ "${#positional_args[@]}" -lt 2 ] || [ "${#positional_args[@]}" -gt 3 ]; then
+        usage >&2
+        exit 2
+    fi
+elif [ "$remove_audio" = true ]; then
+    if [ "${#positional_args[@]}" -ne 2 ]; then
         usage >&2
         exit 2
     fi
@@ -907,6 +950,59 @@ if [ "$extract_audio" = true ]; then
 
     if ! run_extract_audio "$audio_encoder" "$input" "$tmp_output"; then
         error "audio extraction failed"
+        exit 1
+    fi
+
+    mv -f -- "$tmp_output" "$output"
+    trap - EXIT INT TERM HUP
+    printf 'created: %s\n' "$output"
+    exit 0
+fi
+
+if [ "$remove_audio" = true ]; then
+    if [ -n "$clip_start" ] || [ -n "$clip_end" ] || [ -n "$fps" ] || [ "$cfr" = true ] || [ "$preserve_metadata" = true ] || [ "$clear_metadata" = true ] || [ "${#metadata_args[@]}" -gt 0 ]; then
+        error "--remove-audio cannot be combined with video or metadata options"
+        exit 2
+    fi
+
+    output=$requested_output
+
+    case "$output" in
+        *.mp4) ;;
+        *)
+            error "video output must use .mp4"
+            exit 2
+            ;;
+    esac
+
+    if [ "$input" = "$output" ]; then
+        error "input and output paths must be different"
+        exit 1
+    fi
+
+    if [ "$force" = false ] && [ -e "$output" ]; then
+        error "output file already exists: $output"
+        exit 1
+    fi
+
+    tmp_output="${output%.mp4}.part.mp4"
+
+    if ! video_encoder=$(select_video_encoder); then
+        error "no supported H.264 encoder found in ffmpeg"
+        error "tried: libx264, libopenh264, h264_nvenc, h264_qsv, h264_amf, h264_mf, h264_d3d12va, h264_vulkan, h264_videotoolbox"
+        exit 1
+    fi
+
+    info "using video encoder: $video_encoder"
+
+    cleanup() {
+        [ ! -e "$tmp_output" ] || rm -f "$tmp_output"
+    }
+
+    trap cleanup EXIT INT TERM HUP
+
+    if ! run_remove_audio "$video_encoder" "$input" "$tmp_output"; then
+        error "audio removal failed"
         exit 1
     fi
 
