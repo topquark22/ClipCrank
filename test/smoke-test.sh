@@ -108,5 +108,26 @@ else
     fail "re-encoded example video should use H.264 codec"
 fi
 
+sample_audio="examples/bah.wav"
+replaced_audio_video="tmp/Big_Buck_Bunny_replace_audio.mp4"
+
+rm -f "$replaced_audio_video"
+if "$target_script" --replace-audio "$sample_video" "$sample_audio" "$replaced_audio_video" >/dev/null 2>&1 && [ -f "$replaced_audio_video" ]; then
+    pass "replace audio should create output video"
+else
+    fail "replace audio should create output video"
+fi
+if [ -f "$replaced_audio_video" ] && [ "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$replaced_audio_video" | tr -d '\r')" = "h264" ]; then
+    pass "replace audio output should use H.264 video"
+else
+    fail "replace audio output should use H.264 video"
+fi
+if [ -f "$replaced_audio_video" ] && [ "$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$replaced_audio_video" | tr -d '\r')" = "aac" ]; then
+    pass "replace audio output should use AAC audio"
+    rm -f "$replaced_audio_video"
+else
+    fail "replace audio output should use AAC audio"
+fi
+
 say; say "Summary:"; say "  Passed: $pass_count"; say "  Failed: $fail_count"
 if [ "$fail_count" -ne 0 ]; then exit 1; fi
