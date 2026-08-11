@@ -24,6 +24,7 @@ frame_filename_hours=false
 frame_filename_millis=false
 jpeg_quality=90
 jpeg_quality_set=false
+show_metadata=false
 
 usage() {
     cat <<EOF
@@ -45,6 +46,7 @@ Options:
   --comment TEXT           Set comment metadata
   --preserve-metadata      Preserve input global metadata before applying edits
   --clear-metadata         Clear input global metadata before applying edits
+  --show-metadata          Display input metadata and exit
   --start TIME             Start output at [[h:]m:]s[.ms]; defaults to input start
   --end TIME               End output at [[h:]m:]s[.ms]; defaults to input end
   --frame TIME             Capture JPEG frame(s) starting at [[h:]m:]s[.ms]
@@ -58,6 +60,7 @@ Options:
 Examples:
   $progname old-video.avi
   $progname -f input.mov output.mp4
+  $progname --show-metadata input.mov
   $progname --start 12.500 --end 2:05 input.mov clip.mp4
   $progname --frame 1:23.500 input.mp4
   $progname --frame 10 --interval 5 --count 4 input.mp4
@@ -355,6 +358,10 @@ parse_args() {
                 clear_metadata=true
                 shift
                 ;;
+            --show-metadata)
+                show_metadata=true
+                shift
+                ;;
             --start)
                 require_option_value "$1" "$#"
                 clip_start=$2
@@ -598,6 +605,45 @@ fi
 
 input=${positional_args[0]}
 requested_output=${positional_args[1]:-}
+
+if [ "$show_metadata" = true ]; then
+    if [ -n "$requested_output" ]; then
+        error "--show-metadata does not accept an output file"
+        exit 2
+    fi
+
+    if [ "$force" = true ] || [ "$preserve_metadata" = true ] || [ "$clear_metadata" = true ] || [ "${#metadata_args[@]}" -gt 0 ] || [ -n "$clip_start" ] || [ -n "$clip_end" ] || [ -n "$frame_time" ] || [ -n "$fps" ] || [ "$cfr" = true ]; then
+        error "--show-metadata cannot be combined with output options"
+        exit 2
+    fi
+
+    if ! have_command ffprobe; then
+        error "ffprobe is not installed or not on PATH"
+        exit 127
+    fi
+
+    if [ ! -e "$input" ]; then
+        error "input file not found: $input"
+        exit 1
+    fi
+
+    if [ ! -f "$input" ]; then
+        error "input path is not a regular file: $input"
+        exit 1
+    fi
+
+    if [ ! -r "$input" ]; then
+        error "input file is not readable: $input"
+        exit 1
+    fi
+
+    ffprobe \
+        -v error \
+        -show_entries format_tags:stream_tags \
+        -of default \
+        "$input"
+    exit 0
+fi
 
 if ! have_command ffmpeg; then
     error "ffmpeg is not installed or not on PATH"
