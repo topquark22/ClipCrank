@@ -19,6 +19,49 @@
 
 No ImageMagick or other image-processing package is required.
 
+## Supported Input Video Formats
+
+`norm-vid` does not maintain its own list of input formats. It relies on the locally installed `ffmpeg`, so it can accept any video container and codec combination that the local `ffmpeg` build can demux and decode.
+
+Common supported video file formats include:
+
+- MP4 / MPEG-4 (`.mp4`, `.m4v`)
+- QuickTime (`.mov`)
+- Matroska (`.mkv`)
+- WebM (`.webm`)
+- AVI (`.avi`)
+- Flash Video (`.flv`, `.f4v`)
+- MPEG Program Stream (`.mpg`, `.mpeg`, `.vob`)
+- MPEG Transport Stream (`.ts`, `.m2ts`, `.mts`)
+- Windows Media / ASF (`.wmv`, `.asf`)
+- Ogg Video (`.ogv`, `.ogg`)
+- 3GPP / 3GPP2 (`.3gp`, `.3g2`)
+- Material Exchange Format (`.mxf`)
+- NUT (`.nut`)
+- General eXchange Format (`.gxf`)
+- raw H.264 / AVC (`.h264`, `.264`)
+- raw H.265 / HEVC (`.h265`, `.265`, `.hevc`)
+- raw MPEG-1 / MPEG-2 video (`.m1v`, `.m2v`)
+- raw MPEG-4 Part 2 video (`.m4v`)
+- Motion JPEG (`.mjpg`, `.mjpeg`)
+- AV1 bitstreams where supported by the installed `ffmpeg`
+
+This list covers common video formats rather than imposing a whitelist. Less common and legacy formats may also work if `ffmpeg` can read and decode them.
+
+To see the input formats enabled in your installed `ffmpeg` build, run:
+
+```sh
+ffmpeg -demuxers
+```
+
+or, for the combined list of input and output formats:
+
+```sh
+ffmpeg -formats
+```
+
+Actual codec support can vary between `ffmpeg` builds, so a recognized container is usable only when the streams inside it can also be decoded by the installed build.
+
 ## Usage
 
 ```sh
