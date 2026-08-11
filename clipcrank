@@ -800,7 +800,11 @@ if [ "$add_audio" = true ]; then
         exit 2
     fi
 
-    output=${requested_output:-$(derive_video_output_path "$input")}
+    if [ "$input_is_image" = true ]; then
+        output=${requested_output:-$(derive_video_output_path "$audio_input")}
+    else
+        output=${requested_output:-$(derive_video_output_path "$input")}
+    fi
 
     if [ "$input" = "$output" ] || [ "$audio_input" = "$output" ]; then
         error "input and output paths must be different"
