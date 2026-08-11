@@ -107,8 +107,9 @@ else
 fi
 
 sample_image="examples/lenna.png"
-sample_audio="examples/bah.wav"
-created_video="examples/bah.mp4"
+cp -f examples/bah.wav tmp/bah.wav
+sample_audio="tmp/bah.wav"
+created_video="tmp/bah.mp4"
 
 if "$target_script" --force --add-audio "$sample_image" "$sample_audio" >/dev/null 2>&1 && [ -f "$created_video" ]; then
     pass "image add-audio default output should use audio filename"
