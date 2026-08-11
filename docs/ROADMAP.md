@@ -27,25 +27,12 @@ ClipCrank currently provides:
 - Adding or replacing audio with `--add-audio` for either video input or any still-image format supported by the installed FFmpeg build.
 - Still-image input is detected from the media itself rather than from a filename-extension whitelist.
 - For still-image `--add-audio`, the image is looped for the duration of the supplied audio and the default output basename is derived from the audio filename.
+- Extracting the first audio stream to MP3 with `--extract-audio`, with `.mp3` default output naming.
 - Safe overwrite handling with `--force`.
 
 ## Near-Term Priorities
 
-### 1. Extract Audio to MP3
-
-Allow extraction of the audio stream from a video file.
-
-In keeping with ClipCrank's goal of providing a simple interface rather than exposing every `ffmpeg` possibility, extracted audio will always be written as MP3. Supporting multiple audio output formats would add command-line and encoding complexity without improving the primary use case.
-
-Possible interface:
-
-```sh
-clipcrank --extract-audio input.mp4 output.mp3
-```
-
-When no output filename is supplied, derive an `.mp3` filename from the input filename.
-
-### 2. Remove Audio
+### 1. Remove Audio
 
 Provide an operation that creates a video without an audio stream.
 
