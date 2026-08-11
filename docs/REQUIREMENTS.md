@@ -10,7 +10,7 @@ The script is intended to be:
 - portable across environments where the required FFmpeg tools are available,
 - and robust enough to handle old or awkward media formats when `ffmpeg` can decode them.
 
-The current implementation supports H.264/AAC MP4 re-encoding, video clipping, JPEG frame capture, metadata inspection and editing, frame-rate control, audio addition or replacement, still-image plus audio video creation, and safe overwrite handling.
+The current implementation supports H.264/AAC MP4 re-encoding, video clipping, JPEG frame capture, metadata inspection and editing, frame-rate control, audio addition or replacement, still-image plus audio video creation, MP3 audio extraction, and safe overwrite handling.
 
 Operations must be selected explicitly. Running the script with an input file but no operation shall print usage information rather than implicitly re-encoding the file.
 
@@ -22,6 +22,7 @@ The script shall support the following operations:
 
 - `--reencode` to create standardized H.264/AAC MP4 output,
 - `--add-audio` to add or replace audio using video or still-image visual input,
+- `--extract-audio` to extract the first audio stream as MP3,
 - `--show-metadata` to display input metadata and exit,
 - `--frame TIME` to capture one or more JPEG still frames.
 
@@ -56,6 +57,10 @@ For `--add-audio` with video input, the default output path shall be derived fro
 
 For `--add-audio` with still-image input, the default output basename shall be derived from the audio input filename with an `.mp4` extension.
 
+For `--extract-audio`, when no explicit output path is given, the script shall replace the input extension with `.mp3`, or append `.mp3` if the input has no extension.
+
+Explicit `--extract-audio` output paths shall use the `.mp3` extension.
+
 For single-frame capture, when no explicit output path is given, the script shall append a normalized timestamp to the input base name and use a `.jpg` extension.
 
 Frame timestamps used in filenames shall:
@@ -68,7 +73,7 @@ Frame timestamps used in filenames shall:
 
 The script shall write media output to a temporary output path before moving the completed file into place.
 
-Temporary video output shall preserve a `.mp4` suffix so that `ffmpeg` can infer or accept the MP4 container correctly.
+Temporary video output shall preserve a `.mp4` suffix so that `ffmpeg` can infer or accept the MP4 container correctly. Temporary extracted-audio output shall preserve a `.mp3` suffix.
 
 ### 4. Overwrite Behavior
 
@@ -128,6 +133,16 @@ The script shall verify that an AAC encoder is available in the local `ffmpeg` e
 
 The script shall fail with a clear error message if no AAC encoder is available.
 
+For `--extract-audio`, the script shall select an available MP3 encoder from supported local FFmpeg encoders and encode the extracted audio at 192 kb/s.
+
+The current MP3 encoder preference is:
+
+1. `libmp3lame`
+2. `libshine`
+3. `mp3_mf`
+
+The script shall fail with a clear error message if no supported MP3 encoder is available.
+
 ### 8. Add Audio
 
 The script shall support:
@@ -150,7 +165,23 @@ The script shall use generic input looping for still-image input rather than dep
 
 `--add-audio` with still-image input shall not accept `--preserve-metadata`.
 
-### 9. Frame Rate
+### 9. Extract Audio
+
+The script shall support:
+
+```text
+--extract-audio INPUT [OUTPUT]
+```
+
+The operation shall extract the first audio stream from the input and encode it as MP3.
+
+The operation shall omit video, subtitle, and data streams.
+
+If the input does not contain a usable audio stream, the operation shall fail without creating the final output file.
+
+`--extract-audio` shall not accept clipping, frame-rate, or metadata options.
+
+### 10. Frame Rate
 
 The script shall support `--fps N` to convert output video to an explicit frame rate.
 
@@ -160,7 +191,7 @@ The script shall support `--cfr` to force constant-frame-rate output while allow
 
 Frame-rate options shall not be accepted with frame-capture operations.
 
-### 10. Video Clipping
+### 11. Video Clipping
 
 The script shall support `--start TIME` and `--end TIME` with `--reencode`.
 
@@ -182,7 +213,7 @@ The script shall:
 
 Clip timestamps are not required to be incorporated automatically into the default video output filename.
 
-### 11. JPEG Frame Capture
+### 12. JPEG Frame Capture
 
 The script shall support capture of a single JPEG frame using:
 
@@ -212,7 +243,7 @@ JPEG quality shall default to 90 when not specified.
 
 Frame capture shall not be accepted with clipping, frame-rate, or metadata-editing options.
 
-### 12. Metadata
+### 13. Metadata
 
 The script shall support display of metadata using:
 
@@ -235,9 +266,9 @@ The script shall support the following metadata controls for re-encoded MP4 outp
 
 `--preserve-metadata` and `--clear-metadata` shall not be accepted together.
 
-Metadata options shall not be accepted with frame capture.
+Metadata options shall not be accepted with frame capture or `--extract-audio`.
 
-### 13. Dependency Handling
+### 14. Dependency Handling
 
 The script shall require `ffmpeg` to be installed and available on `PATH` for media-writing operations.
 
@@ -247,18 +278,18 @@ The script shall fail clearly when a required executable is unavailable.
 
 Because FFmpeg builds differ by platform and distribution, the script shall adapt to the encoders and decoders exposed by the local FFmpeg installation.
 
-### 14. Messaging and Exit Behavior
+### 15. Messaging and Exit Behavior
 
 The script shall:
 
 - print a usage message for invalid invocation,
 - print clear error messages to standard error,
-- print the selected video encoder during re-encoding,
+- print the selected video or audio encoder when applicable,
 - print created output paths after successful operations,
 - exit non-zero on failure,
 - exit zero on success.
 
-### 15. Cleanup Behavior
+### 16. Cleanup Behavior
 
 The script shall remove partial temporary output files when an operation fails or is interrupted.
 
@@ -278,7 +309,7 @@ ClipCrank should expose common user intentions rather than merely reproducing ra
 
 The script should work across different environments where shell execution and the required FFmpeg tools are available.
 
-Behavior shall not depend on the presence of a single specific H.264 encoder implementation.
+Behavior shall not depend on the presence of a single specific H.264 or MP3 encoder implementation.
 
 Tests that invoke native Windows FFmpeg tools under Cygwin shall avoid POSIX absolute paths where native Windows executables cannot resolve them.
 
@@ -292,6 +323,8 @@ To support this, the script should:
 - use AAC audio,
 - use `yuv420p`,
 - use `+faststart`.
+
+Extracted audio should use MP3 for broad compatibility.
 
 ### 4. Safety
 
@@ -307,6 +340,7 @@ The script does not currently aim to:
 - preserve data streams,
 - preserve chapter information,
 - provide configurable video quality settings,
+- provide configurable extracted-audio format,
 - provide batch conversion as a built-in operation,
 - provide recursive directory traversal,
 - provide a `--verbose` or `--quiet` mode,
@@ -332,6 +366,9 @@ At minimum, testing should cover:
 - still-image detection that does not depend on a `.jpg` or `.png` filename extension,
 - H.264/AAC verification of `--add-audio` output,
 - default still-image output basename derivation from the audio input filename,
+- extraction of MP3 audio from a generated video containing AAC audio,
+- MP3 codec verification with `ffprobe`,
+- default `.mp3` output naming,
 - missing input handling,
 - invalid input path handling,
 - output-already-exists handling,
@@ -352,7 +389,7 @@ The project roadmap is maintained in `docs/ROADMAP.md`.
 
 Potential future capabilities include:
 
-- audio extraction and removal,
+- audio removal,
 - resizing and scaling,
 - cropping and padding,
 - rotation and flipping,
