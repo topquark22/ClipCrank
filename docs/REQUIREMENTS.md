@@ -24,8 +24,10 @@ The script shall support the following operations:
 - `--add-audio` to add or replace audio using video or still-image visual input,
 - `--extract-audio` to extract the first audio stream as MP3,
 - `--remove-audio` to create H.264 MP4 output without an audio stream,
-- `--show-metadata` to display input metadata and exit,
+- `--show-metadata` to display stored input metadata tags and exit,
 - `--frame TIME` to capture one or more JPEG still frames.
+
+The planned `--info` operation shall provide concise technical media information without changing the file.
 
 Only one operation may be selected per invocation.
 
@@ -49,6 +51,8 @@ The script shall:
 For `--add-audio`, the visual input shall be classified using `ffprobe` rather than by filename extension. A single-frame visual input shall be treated as a still image; visual input containing multiple frames shall be treated as video. Input that cannot be classified as either a supported still image or video shall be rejected.
 
 For `--remove-audio`, both the input path and output path shall be required. The operation shall not derive a default output filename.
+
+The planned `--info` operation shall accept exactly one input file and no output path.
 
 ### 3. Output Naming
 
@@ -269,13 +273,15 @@ Frame capture shall not be accepted with clipping, frame-rate, or metadata-editi
 
 ### 14. Metadata
 
-The script shall support display of metadata using:
+The script shall support display of stored metadata tags using:
 
 ```text
 --show-metadata INPUT
 ```
 
 Metadata inspection shall use `ffprobe`, shall not create output, and shall not accept output-modifying options.
+
+`--show-metadata` shall remain semantically limited to stored descriptive metadata tags. Technical media properties such as codec, resolution, frame rate, duration, and bitrate shall belong to `--info` rather than `--show-metadata`.
 
 The script shall support the following metadata controls for re-encoded MP4 output:
 
@@ -292,17 +298,50 @@ The script shall support the following metadata controls for re-encoded MP4 outp
 
 Metadata options shall not be accepted with frame capture, `--extract-audio`, or `--remove-audio`.
 
-### 15. Dependency Handling
+### 15. Media Information
+
+The planned `--info` operation shall support:
+
+```text
+--info INPUT
+```
+
+`--info` shall be a read-only inspection operation and shall not create or modify any output file.
+
+`--info` shall use `ffprobe` to report concise, human-readable technical media information, including where applicable:
+
+- container format,
+- duration,
+- overall bitrate,
+- video codec,
+- resolution,
+- frame rate,
+- pixel format,
+- video bitrate,
+- audio codec,
+- sample rate,
+- channel count,
+- audio bitrate.
+
+Information shall be grouped into logical sections such as File or Container, Video, and Audio.
+
+Sections that do not apply to the input shall be omitted or clearly reported as absent. Audio-only input shall not require a Video section, and video without audio shall clearly indicate that no audio stream is present.
+
+`--info` shall accept exactly one input file, shall not accept an output path, and shall not accept output-modifying options.
+
+`--info` shall not replace or duplicate `--show-metadata`; the two operations shall remain distinct, with `--info` reporting technical media properties and `--show-metadata` reporting stored metadata tags.
+
+### 16. Dependency Handling
 
 The script shall require `ffmpeg` to be installed and available on `PATH` for media-writing operations.
 
-The script shall require `ffprobe` to be installed and available on `PATH` for metadata inspection and `--add-audio` visual-input classification.
+The script shall require `ffprobe` to be installed and available on `PATH` for metadata inspection, planned `--info` media inspection, and `--add-audio` visual-input classification.
 
 The script shall fail clearly when a required executable is unavailable.
 
 Because FFmpeg builds differ by platform and distribution, the script shall adapt to the encoders and decoders exposed by the local FFmpeg installation.
 
-### 16. Messaging and Exit Behavior
+### 17. Messaging and Exit Behavior
 
 The script shall:
 
@@ -313,7 +352,7 @@ The script shall:
 - exit non-zero on failure,
 - exit zero on success.
 
-### 17. Cleanup Behavior
+### 18. Cleanup Behavior
 
 The script shall remove partial temporary output files when an operation fails or is interrupted.
 
@@ -407,6 +446,7 @@ At minimum, testing should cover:
 - frame filename normalization,
 - multi-frame filename sorting across an hour boundary,
 - metadata inspection,
+- planned `--info` technical media inspection,
 - encoder-detection behavior,
 - cleanup of temporary output artifacts on failure.
 
@@ -428,5 +468,4 @@ Potential future capabilities include:
 - subtitle handling,
 - text and image overlays,
 - target-quality or target-size compression,
-- additional output codecs and containers,
-- richer media-information reporting.
+- additional output codecs and containers.
