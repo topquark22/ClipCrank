@@ -1,6 +1,6 @@
 # ClipCrank
 
-`clipcrank` converts many kinds of video files into standardized MP4 output using `ffmpeg`. It can also create clips based on starting and/or ending timestamps, capture one or more JPEG still frames from a video, and add or replace audio using either a video or still image as the visual source.
+`clipcrank` converts many kinds of video files into standardized MP4 output using `ffmpeg`. It can also create clips based on starting and/or ending timestamps, capture one or more JPEG still frames from a video, add or replace audio using either a video or still image as the visual source, and extract audio to MP3.
 
 `clipcrank` is a wrapper for `ffmpeg`, intended to simplify common `ffmpeg` operations and provide a more intuitive command-line interface. It does not replace `ffmpeg`; instead, it handles the underlying invocation and options for common video conversion, clipping, frame-capture, metadata, and audio tasks.
 
@@ -11,6 +11,7 @@
 - Captures single or multiple JPEG frames
 - Adds or replaces audio on video input
 - Creates H.264/AAC MP4 video from a still image plus audio
+- Extracts audio from video to MP3
 - JPEG quality defaults to 90 and is configurable
 - Refuses to overwrite existing output by default
 - Supports `-f` / `--force` to overwrite existing output
@@ -79,6 +80,7 @@ The available operations currently are:
 
 - `--reencode` — recode video as standardized H.264/AAC MP4
 - `--add-audio` — add or replace audio using a video or still image as input
+- `--extract-audio` — extract the first audio stream as MP3
 - `--show-metadata` — display metadata and exit
 - `--frame TIME` — capture one or more JPEG frames
 
@@ -111,6 +113,17 @@ The replacement audio may use any format that the installed `ffmpeg` can decode.
 ```
 
 Still-image input is detected from the media itself rather than from a filename-extension whitelist, so any still-image format that the installed FFmpeg can decode may be used. The still image is displayed for the duration of the audio. If the output filename is omitted for still-image input, the default output basename is derived from the audio filename with an `.mp4` extension.
+
+### Extracting audio
+
+Use `--extract-audio` to extract the first audio stream from a video and encode it as MP3:
+
+```sh
+./clipcrank --extract-audio input.mp4
+./clipcrank --extract-audio input.mp4 output.mp3
+```
+
+If the output filename is omitted, the input extension is replaced with `.mp3`. Explicit output filenames must use the `.mp3` extension.
 
 ### Overwriting existing files
 
@@ -207,7 +220,7 @@ Use `--reencode` with `--fps N` to convert output video to an explicit frame rat
 
 ## Frame-capture option compatibility
 
-`--frame` cannot be combined with `--reencode`, `--add-audio`, `--show-metadata`, `--start`, `--end`, `--fps`, `--cfr`, or MP4 metadata options.
+`--frame` cannot be combined with `--reencode`, `--add-audio`, `--extract-audio`, `--show-metadata`, `--start`, `--end`, `--fps`, `--cfr`, or MP4 metadata options.
 
 ## Testing
 
