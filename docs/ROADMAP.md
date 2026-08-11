@@ -33,12 +33,21 @@ ClipCrank currently provides:
 
 ## Near-Term Priorities
 
-### Media Information
+### Media Information with `--info`
 
-Provide a general inspection operation, building on `--show-metadata`, that reports useful media properties in a concise form:
+Add a separate read-only `--info` operation for concise technical media information. `--show-metadata` should remain limited to descriptive metadata tags stored in the file; `--info` should report technical properties of the media itself.
+
+Possible interface:
+
+```sh
+clipcrank --info input.mp4
+```
+
+The output should report useful properties in a concise, human-readable form, including where applicable:
 
 - container format
 - duration
+- overall bitrate
 - video codec
 - resolution
 - frame rate
@@ -49,7 +58,9 @@ Provide a general inspection operation, building on `--show-metadata`, that repo
 - channel count
 - audio bitrate
 
-The objective is a friendlier summary than raw `ffprobe` output.
+Sections that do not apply to the input should be omitted or clearly reported as absent. For example, an audio-only file should not display a Video section, and a video with no audio should report no audio stream.
+
+`--info` should use `ffprobe`, create no output file, accept exactly one input file, and reject output-modifying options. The objective is a friendlier summary than raw `ffprobe` output while keeping `--show-metadata` semantically focused on stored metadata tags.
 
 ### Resize and Scale
 
