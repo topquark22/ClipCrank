@@ -24,25 +24,12 @@ ClipCrank currently provides:
 - Configurable JPEG quality.
 - Metadata inspection with `--show-metadata`.
 - Metadata preservation, clearing, and explicit metadata editing.
-- Audio replacement with `--replace-audio`.
+- Adding or replacing audio with `--add-audio` for either video input or JPEG/PNG still-image input.
 - Safe overwrite handling with `--force`.
 
 ## Near-Term Priorities
 
-### 1. Create Video from Still Image and Audio
-
-Supplant `--replace-audio` with a more generally useful `--create-from` operation that creates a new video from a still image and an audio file.
-
-The still image shall be a JPEG or PNG file. The audio input may use any audio format that the installed `ffmpeg` can decode. The resulting video will use ClipCrank's standard H.264/AAC MP4 format and will display the still image for the duration of the audio.
-
-Possible interface:
-
-```sh
-clipcrank --create-from image.jpg soundtrack.wav output.mp4
-clipcrank --create-from image.png soundtrack.mp3 output.mp4
-```
-
-### 2. Extract Audio to MP3
+### 1. Extract Audio to MP3
 
 Allow extraction of the audio stream from a video file.
 
@@ -56,7 +43,7 @@ clipcrank --extract-audio input.mp4 output.mp3
 
 When no output filename is supplied, derive an `.mp3` filename from the input filename.
 
-### 3. Remove Audio
+### 2. Remove Audio
 
 Provide an operation that creates a video without an audio stream.
 
