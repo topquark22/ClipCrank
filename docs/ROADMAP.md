@@ -24,21 +24,14 @@ ClipCrank currently provides:
 - Configurable JPEG quality.
 - Metadata inspection with `--show-metadata`.
 - Metadata preservation, clearing, and explicit metadata editing.
-- Adding or replacing audio with `--add-audio` for either video input or JPEG/PNG still-image input.
+- Adding or replacing audio with `--add-audio` for either video input or any still-image format supported by the installed FFmpeg build.
+- Still-image input is detected from the media itself rather than from a filename-extension whitelist.
 - For still-image `--add-audio`, the image is looped for the duration of the supplied audio and the default output basename is derived from the audio filename.
 - Safe overwrite handling with `--force`.
 
 ## Near-Term Priorities
 
-### 1. Format-Agnostic Still-Image Input
-
-Remove the JPEG/PNG filename-extension restriction from still-image input to `--add-audio`.
-
-Instead of identifying still images by filename extension, use `ffprobe` to classify the visual input as video or a still image. Accept any still-image format that the installed FFmpeg build can decode, while rejecting inputs that cannot be classified as either a supported video source or a still image.
-
-The existing `examples/lenna.png` fixture can remain the canonical still-image test input; the implementation should not maintain its own whitelist of image extensions.
-
-### 2. Extract Audio to MP3
+### 1. Extract Audio to MP3
 
 Allow extraction of the audio stream from a video file.
 
@@ -52,7 +45,7 @@ clipcrank --extract-audio input.mp4 output.mp3
 
 When no output filename is supplied, derive an `.mp3` filename from the input filename.
 
-### 3. Remove Audio
+### 2. Remove Audio
 
 Provide an operation that creates a video without an audio stream.
 
