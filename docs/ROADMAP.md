@@ -28,6 +28,44 @@ ClipCrank currently provides:
 
 ## Near-Term Priorities
 
+### 1. Extract Audio to MP3
+
+Allow extraction of the audio stream from a video file.
+
+In keeping with ClipCrank's goal of providing a simple interface rather than exposing every `ffmpeg` possibility, extracted audio will always be written as MP3. Supporting multiple audio output formats would add command-line and encoding complexity without improving the primary use case.
+
+Possible interface:
+
+```sh
+clipcrank --extract-audio input.mp4 output.mp3
+```
+
+When no output filename is supplied, derive an `.mp3` filename from the input filename.
+
+### 2. Replace Audio
+
+Allow the video from one input file to be combined with audio from a separate audio file.
+
+The replacement audio input may use any audio format that the installed `ffmpeg` can decode. The resulting video output will use ClipCrank's standard H.264/AAC MP4 format.
+
+Possible interface:
+
+```sh
+clipcrank --replace-audio soundtrack.wav input.mp4 output.mp4
+```
+
+### 3. Remove Audio
+
+Provide an operation that creates a video without an audio stream.
+
+Possible interface:
+
+```sh
+clipcrank --remove-audio input.mp4 output.mp4
+```
+
+This operation should remove the audio stream rather than merely setting its volume to zero. Output should remain in ClipCrank's standard H.264 MP4 format.
+
 ### Media Information
 
 Provide a general inspection operation, building on `--show-metadata`, that reports useful media properties in a concise form:
@@ -79,40 +117,6 @@ Provide simple operations for:
 - 180-degree rotation
 - horizontal flip
 - vertical flip
-
-### Audio Extraction
-
-Allow extraction of the audio stream from a video file.
-
-Possible interface:
-
-```sh
-clipcrank --audio-only input.mp4 output.mp3
-clipcrank --audio-only input.mp4 output.wav
-clipcrank --audio-only input.mp4 output.flac
-```
-
-The output extension should determine the requested audio format where practical.
-
-### Remove Audio
-
-Provide a simple mute operation:
-
-```sh
-clipcrank --mute input.mp4 output.mp4
-```
-
-This should remove audio streams rather than merely setting their volume to zero.
-
-### Replace Audio
-
-Allow a video stream from one file to be combined with audio from another file.
-
-Possible interface:
-
-```sh
-clipcrank --replace-audio soundtrack.wav input.mp4 output.mp4
-```
 
 ### Playback Speed
 
