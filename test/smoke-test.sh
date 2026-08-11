@@ -108,13 +108,12 @@ fi
 
 sample_image="examples/lenna.png"
 sample_audio="examples/bah.wav"
-expected_basename="$(basename "${sample_audio%.*}.mp4")"
-created_video="tmp/$expected_basename"
+created_video="tmp/$(basename "${sample_audio%.*}").mp4"
 
-if "$target_script" --force --add-audio "$sample_image" "$sample_audio" "$created_video" >/dev/null 2>&1 && [ -f "$created_video" ] && [ "$(basename "$created_video")" = "$expected_basename" ]; then
-    pass "image add-audio default output should use audio filename"
+if "$target_script" --force --add-audio "$sample_image" "$sample_audio" "$created_video" >/dev/null 2>&1 && [ -f "$created_video" ] && [ "$(basename "$created_video")" = "$(basename "${sample_audio%.*}").mp4" ]; then
+    pass "image add-audio output should use audio filename"
 else
-    fail "image add-audio default output should use audio filename"
+    fail "image add-audio output should use audio filename"
 fi
 if [ -f "$created_video" ] && [ "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$created_video" | tr -d '\r')" = "h264" ]; then
     pass "image add-audio output should use H.264 video"
