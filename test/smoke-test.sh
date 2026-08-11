@@ -76,6 +76,8 @@ else
 fi
 run_expect_failure_message "show metadata should reject output file" "--show-metadata does not accept an output file" "$target_script" --show-metadata "$tmp_dir/metadata.mp4" "$tmp_dir/out.mp4"
 run_expect_failure_message "show metadata should reject output options" "--show-metadata cannot be combined with output options" "$target_script" --show-metadata --start 1 "$tmp_dir/metadata.mp4"
+run_expect_failure_message "info should reject output file" "--info does not accept an output file" "$target_script" --info "$tmp_dir/metadata.mp4" "$tmp_dir/out.mp4"
+run_expect_failure_message "info should reject output options" "--info cannot be combined with output options" "$target_script" --info --start 1 "$tmp_dir/metadata.mp4"
 
 run_expect_failure_message "input without operation should show usage" "Usage:" "$target_script" "$tmp_dir/metadata.mp4"
 run_expect_failure "nonexistent input should fail" "$target_script" --reencode "$tmp_dir/missing.flv"
@@ -95,6 +97,12 @@ if [ -f "$sample_video" ] && [ "$(ffprobe -v error -select_streams v:0 -show_ent
     pass "example video should use VP9 codec"
 else
     fail "example video should use VP9 codec"
+fi
+if output=$("$target_script" --info "$sample_video" 2>&1) &&
+   case "$output" in *"Container:"*"Video:"*"Codec:       vp9"*"Audio:"*"None"*) true ;; *) false ;; esac; then
+    pass "info should summarize video without audio"
+else
+    fail "info should summarize video without audio"
 fi
 if "$target_script" --force --reencode "$sample_video" "$reencoded_video" >/dev/null 2>&1 && [ -f "$reencoded_video" ]; then
     pass "example VP9 video should re-encode successfully"
@@ -125,6 +133,12 @@ if [ -f "$created_video" ] && [ "$(ffprobe -v error -select_streams a:0 -show_en
     pass "image add-audio output should use AAC audio"
 else
     fail "image add-audio output should use AAC audio"
+fi
+if output=$("$target_script" --info "$created_video" 2>&1) &&
+   case "$output" in *"Video:"*"Codec:       h264"*"Audio:"*"Codec:       aac"*) true ;; *) false ;; esac; then
+    pass "info should summarize video with audio"
+else
+    fail "info should summarize video with audio"
 fi
 
 extracted_audio="tmp/bah.mp3"
