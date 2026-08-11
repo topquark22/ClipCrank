@@ -101,10 +101,10 @@ else
 fi
 if [ -f "$reencoded_video" ] && [ "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$reencoded_video")" = "h264" ]; then
     pass "re-encoded example video should use H.264 codec"
+    rm -f "$reencoded_video"
 else
     fail "re-encoded example video should use H.264 codec"
 fi
-rm -f "$reencoded_video"
 
 say; say "Summary:"; say "  Passed: $pass_count"; say "  Failed: $fail_count"
 if [ "$fail_count" -ne 0 ]; then exit 1; fi
