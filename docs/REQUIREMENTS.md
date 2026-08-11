@@ -46,6 +46,8 @@ The script shall:
 
 For `--add-audio`, the visual input shall be classified using `ffprobe` rather than by filename extension. A single-frame visual input shall be treated as a still image; visual input containing multiple frames shall be treated as video. Input that cannot be classified as either a supported still image or video shall be rejected.
 
+For the planned `--remove-audio` operation, both the input path and output path shall be required. The operation shall not derive a default output filename.
+
 ### 3. Output Naming
 
 For video re-encoding, when no explicit output path is given, the script shall:
@@ -60,6 +62,8 @@ For `--add-audio` with still-image input, the default output basename shall be d
 For `--extract-audio`, when no explicit output path is given, the script shall replace the input extension with `.mp3`, or append `.mp3` if the input has no extension.
 
 Explicit `--extract-audio` output paths shall use the `.mp3` extension.
+
+For the planned `--remove-audio` operation, an explicit output path shall be mandatory. No default output path shall be generated.
 
 For single-frame capture, when no explicit output path is given, the script shall append a normalized timestamp to the input base name and use a `.jpg` extension.
 
