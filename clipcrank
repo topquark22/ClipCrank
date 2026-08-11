@@ -12,6 +12,7 @@ reencode=false
 add_audio=false
 extract_audio=false
 remove_audio=false
+show_info=false
 
 fps=
 cfr=false
@@ -45,6 +46,7 @@ Operations:
   --add-audio               Add or replace audio: VIDEO|IMAGE AUDIO [OUTPUT]
   --extract-audio           Extract audio as MP3
   --remove-audio            Remove audio: INPUT OUTPUT
+  --info                    Display technical media information and exit
   --show-metadata           Display input metadata and exit
   --frame TIME              Capture JPEG frame(s) starting at [[h:]m:]s[.ms]
 
@@ -74,6 +76,7 @@ Examples:
   $progname --add-audio image.jpg soundtrack.wav output.mp4
   $progname --extract-audio input.mp4 output.mp3
   $progname --remove-audio input.mp4 silent.mp4
+  $progname --info input.mov
   $progname --show-metadata input.mov
   $progname --reencode --start 12.500 --end 2:05 input.mov clip.mp4
   $progname --frame 1:23.500 input.mp4
@@ -92,6 +95,113 @@ info() {
 
 have_command() {
     command -v "$1" >/dev/null 2>&1
+}
+
+probe_value() {
+    input=$1
+    entries=$2
+    selector=${3:-}
+
+    selector_args=()
+    if [ -n "$selector" ]; then
+        selector_args=( -select_streams "$selector" )
+    fi
+
+    ffprobe \
+        -v error \
+        "${selector_args[@]}" \
+        -show_entries "$entries" \
+        -of default=noprint_wrappers=1:nokey=1 \
+        "$input" 2>/dev/null |
+    tr -d '\r' |
+    head -n 1
+}
+
+format_duration() {
+    value=$1
+
+    awk -v t="$value" 'BEGIN {
+        if (t == "" || t == "N/A") exit
+        h=int(t/3600); t-=h*3600
+        m=int(t/60); s=t-m*60
+        printf "%02d:%02d:%06.3f", h, m, s
+    }'
+}
+
+format_bitrate() {
+    value=$1
+
+    if [ -n "$value" ] && [ "$value" != "N/A" ]; then
+        awk -v b="$value" 'BEGIN { printf "%.0f kb/s", b/1000 }'
+    fi
+}
+
+format_frame_rate() {
+    value=$1
+
+    if [ -n "$value" ] && [ "$value" != "N/A" ] && [ "$value" != "0/0" ]; then
+        awk -F/ '{
+            if (NF == 2 && $2 != 0) printf "%.3f fps", $1/$2
+            else printf "%s fps", $1
+        }' <<< "$value" |
+        sed 's/\.000 fps$/ fps/'
+    fi
+}
+
+show_media_info() {
+    input=$1
+
+    format_name=$(probe_value "$input" format=format_name)
+    format_long_name=$(probe_value "$input" format=format_long_name)
+    duration=$(format_duration "$(probe_value "$input" format=duration)")
+    overall_bitrate=$(format_bitrate "$(probe_value "$input" format=bit_rate)")
+
+    video_codec=$(probe_value "$input" stream=codec_name v:0)
+    video_width=$(probe_value "$input" stream=width v:0)
+    video_height=$(probe_value "$input" stream=height v:0)
+    video_rate=$(format_frame_rate "$(probe_value "$input" stream=r_frame_rate v:0)")
+    video_pixel_format=$(probe_value "$input" stream=pix_fmt v:0)
+    video_bitrate=$(format_bitrate "$(probe_value "$input" stream=bit_rate v:0)")
+
+    audio_codec=$(probe_value "$input" stream=codec_name a:0)
+    audio_sample_rate=$(probe_value "$input" stream=sample_rate a:0)
+    audio_channels=$(probe_value "$input" stream=channels a:0)
+    audio_bitrate=$(format_bitrate "$(probe_value "$input" stream=bit_rate a:0)")
+
+    printf 'File: %s\n\n' "$input"
+    printf 'Container:\n'
+    if [ -n "$format_long_name" ]; then
+        if [ -n "$format_name" ]; then
+            printf '  Format:      %s (%s)\n' "$format_long_name" "$format_name"
+        else
+            printf '  Format:      %s\n' "$format_long_name"
+        fi
+    elif [ -n "$format_name" ]; then
+        printf '  Format:      %s\n' "$format_name"
+    fi
+    [ -z "$duration" ] || printf '  Duration:    %s\n' "$duration"
+    [ -z "$overall_bitrate" ] || printf '  Bitrate:     %s\n' "$overall_bitrate"
+
+    if [ -n "$video_codec" ]; then
+        printf '\nVideo:\n'
+        printf '  Codec:       %s\n' "$video_codec"
+        if [ -n "$video_width" ] && [ -n "$video_height" ]; then
+            printf '  Resolution:  %sx%s\n' "$video_width" "$video_height"
+        fi
+        [ -z "$video_rate" ] || printf '  Frame rate:  %s\n' "$video_rate"
+        [ -z "$video_pixel_format" ] || printf '  Pixel format: %s\n' "$video_pixel_format"
+        [ -z "$video_bitrate" ] || printf '  Bitrate:     %s\n' "$video_bitrate"
+    fi
+
+    printf '\nAudio:\n'
+    if [ -n "$audio_codec" ]; then
+        printf '  Codec:       %s\n' "$audio_codec"
+        [ -z "$audio_sample_rate" ] || printf '  Sample rate: %s Hz\n' "$audio_sample_rate"
+        [ -z "$audio_channels" ] || printf '  Channels:    %s\n' "$audio_channels"
+        [ -z "$audio_bitrate" ] || printf '  Bitrate:     %s\n' "$audio_bitrate"
+    else
+        printf '  None\n'
+    fi
 }
 
 classify_visual_input() {
@@ -416,6 +526,10 @@ parse_args() {
                 ;;
             --remove-audio)
                 remove_audio=true
+                shift
+                ;;
+            --info)
+                show_info=true
                 shift
                 ;;
             --*=*)
@@ -809,6 +923,7 @@ operation_count=0
 [ "$add_audio" = false ] || operation_count=$((operation_count + 1))
 [ "$extract_audio" = false ] || operation_count=$((operation_count + 1))
 [ "$remove_audio" = false ] || operation_count=$((operation_count + 1))
+[ "$show_info" = false ] || operation_count=$((operation_count + 1))
 [ "$show_metadata" = false ] || operation_count=$((operation_count + 1))
 [ -z "$frame_time" ] || operation_count=$((operation_count + 1))
 
@@ -845,6 +960,41 @@ requested_output=${positional_args[1]:-}
 if [ "$add_audio" = true ]; then
     audio_input=${positional_args[1]}
     requested_output=${positional_args[2]:-}
+fi
+
+if [ "$show_info" = true ]; then
+    if [ -n "$requested_output" ]; then
+        error "--info does not accept an output file"
+        exit 2
+    fi
+
+    if [ "$force" = true ] || [ "$preserve_metadata" = true ] || [ "$clear_metadata" = true ] || [ "${#metadata_args[@]}" -gt 0 ] || [ -n "$clip_start" ] || [ -n "$clip_end" ] || [ -n "$fps" ] || [ "$cfr" = true ]; then
+        error "--info cannot be combined with output options"
+        exit 2
+    fi
+
+    if ! have_command ffprobe; then
+        error "ffprobe is not installed or not on PATH"
+        exit 127
+    fi
+
+    if [ ! -e "$input" ]; then
+        error "input file not found: $input"
+        exit 1
+    fi
+
+    if [ ! -f "$input" ]; then
+        error "input path is not a regular file: $input"
+        exit 1
+    fi
+
+    if [ ! -r "$input" ]; then
+        error "input file is not readable: $input"
+        exit 1
+    fi
+
+    show_media_info "$input"
+    exit 0
 fi
 
 if [ "$show_metadata" = true ]; then
