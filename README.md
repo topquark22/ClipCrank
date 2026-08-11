@@ -21,8 +21,7 @@
 ## Requirements
 
 - Bash in a POSIX-like shell environment
-- `ffmpeg` installed and available on `PATH`
-- `ffprobe` installed and available on `PATH` for media and metadata inspection and `--add-audio` input classification
+- `ffmpeg` and `ffprobe` installed and available on `PATH`
 
 Linux and other POSIX-like systems can normally use their native Bash and FFmpeg packages.
 
