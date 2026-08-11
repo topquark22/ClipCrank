@@ -126,6 +126,16 @@ else
     fail "image add-audio output should use AAC audio"
 fi
 
+format_agnostic_image="tmp/lenna.still"
+format_agnostic_video="tmp/lenna_still_bah.mp4"
+cp -f "$sample_image" "$format_agnostic_image"
+
+if "$target_script" --force --add-audio "$format_agnostic_image" "$sample_audio" "$format_agnostic_video" >/dev/null 2>&1 && [ -f "$format_agnostic_video" ]; then
+    pass "add audio should detect still image without relying on extension"
+else
+    fail "add audio should detect still image without relying on extension"
+fi
+
 added_audio_video="tmp/Big_Buck_Bunny_add_audio.mp4"
 
 if "$target_script" --force --add-audio "$sample_video" "$sample_audio" "$added_audio_video" >/dev/null 2>&1 && [ -f "$added_audio_video" ]; then
