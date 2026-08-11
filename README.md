@@ -18,6 +18,7 @@
 
 - A POSIX-like shell environment
 - `ffmpeg` installed and available on `PATH`
+- `ffprobe` installed and available on `PATH` for metadata inspection
 
 No ImageMagick or other image-processing package is required.
 
@@ -81,6 +82,16 @@ By default, `clipcrank` refuses to overwrite an existing output file. Use `-f` o
 ```
 
 This applies to normal video conversion, single-frame capture, and every output in multi-frame capture. Temporary files are still used, so the existing final output is replaced only after the new output has been successfully created.
+
+## Metadata
+
+Use `--show-metadata` to display the metadata already stored in the input file without creating an output file:
+
+```sh
+./clipcrank --show-metadata input.mp4
+```
+
+This displays container-level and stream-level metadata using `ffprobe`, then exits. `--show-metadata` is an inspection mode and cannot be combined with output or conversion options.
 
 ## Video Clips
 
