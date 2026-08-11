@@ -30,7 +30,15 @@ ClipCrank currently provides:
 
 ## Near-Term Priorities
 
-### 1. Extract Audio to MP3
+### 1. Format-Agnostic Still-Image Input
+
+Remove the JPEG/PNG filename-extension restriction from still-image input to `--add-audio`.
+
+Instead of identifying still images by filename extension, use `ffprobe` to classify the visual input as video or a still image. Accept any still-image format that the installed FFmpeg build can decode, while rejecting inputs that cannot be classified as either a supported video source or a still image.
+
+The existing `examples/lenna.png` fixture can remain the canonical still-image test input; the implementation should not maintain its own whitelist of image extensions.
+
+### 2. Extract Audio to MP3
 
 Allow extraction of the audio stream from a video file.
 
@@ -44,7 +52,7 @@ clipcrank --extract-audio input.mp4 output.mp3
 
 When no output filename is supplied, derive an `.mp3` filename from the input filename.
 
-### 2. Remove Audio
+### 3. Remove Audio
 
 Provide an operation that creates a video without an audio stream.
 
