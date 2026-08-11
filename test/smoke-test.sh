@@ -4,7 +4,7 @@ set -eu
 progname="${0##*/}"
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 repo_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
-target_script="$repo_root/norm-vid"
+target_script="$repo_root/clipcrank"
 
 pass_count=0
 fail_count=0
@@ -13,7 +13,7 @@ pass() { pass_count=$((pass_count + 1)); printf 'PASS: %s\n' "$*"; }
 fail() { fail_count=$((fail_count + 1)); printf 'FAIL: %s\n' "$*"; }
 run_expect_failure() { test_name=$1; shift; if "$@" >/dev/null 2>&1; then fail "$test_name"; else pass "$test_name"; fi; }
 run_expect_failure_message() { test_name=$1; expected=$2; shift 2; if output=$("$@" 2>&1); then fail "$test_name"; return; fi; case "$output" in *"$expected"*) pass "$test_name" ;; *) fail "$test_name" ;; esac; }
-make_temp_dir() { if command -v mktemp >/dev/null 2>&1; then mktemp -d; else temp_dir="${TMPDIR:-/tmp}/norm-vid-smoke-$$"; mkdir -p "$temp_dir"; printf '%s\n' "$temp_dir"; fi; }
+make_temp_dir() { if command -v mktemp >/dev/null 2>&1; then mktemp -d; else temp_dir="${TMPDIR:-/tmp}/clipcrank-smoke-$$"; mkdir -p "$temp_dir"; printf '%s\n' "$temp_dir"; fi; }
 cleanup() { if [ -n "${tmp_dir:-}" ] && [ -d "${tmp_dir:-}" ]; then rm -rf "$tmp_dir"; fi; }
 
 if [ ! -f "$target_script" ]; then printf 'FAIL: target script not found: %s\n' "$target_script" >&2; exit 1; fi
@@ -59,6 +59,21 @@ if PATH="$tmp_dir/bin:$PATH" "$target_script" --frame 59:59 --interval 1 --count
 else
     fail "frame filenames crossing hour boundary should include hours"
 fi
+
+cat > "$tmp_dir/bin/ffprobe" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '[FORMAT]' 'TAG:title=Example Title' '[/FORMAT]'
+EOF
+chmod +x "$tmp_dir/bin/ffprobe"
+touch "$tmp_dir/metadata.mp4"
+if output=$(PATH="$tmp_dir/bin:$PATH" "$target_script" --show-metadata "$tmp_dir/metadata.mp4" 2>&1) &&
+   case "$output" in *"TAG:title=Example Title"*) true ;; *) false ;; esac; then
+    pass "show metadata should display ffprobe metadata"
+else
+    fail "show metadata should display ffprobe metadata"
+fi
+run_expect_failure_message "show metadata should reject output file" "--show-metadata does not accept an output file" "$target_script" --show-metadata "$tmp_dir/metadata.mp4" "$tmp_dir/out.mp4"
+run_expect_failure_message "show metadata should reject output options" "--show-metadata cannot be combined with output options" "$target_script" --show-metadata --start 1 "$tmp_dir/metadata.mp4"
 
 run_expect_failure "nonexistent input should fail" "$target_script" "$tmp_dir/missing.flv"
 mkdir "$tmp_dir/input-dir"; run_expect_failure "directory input should fail" "$target_script" "$tmp_dir/input-dir"
