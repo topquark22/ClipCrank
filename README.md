@@ -13,6 +13,7 @@
 - Creates H.264/AAC MP4 video from a still image plus audio
 - Extracts audio from video to MP3
 - Removes audio from video
+- Displays technical media information
 - JPEG quality defaults to 90 and is configurable
 - Refuses to overwrite existing output by default
 - Supports `-f` / `--force` to overwrite existing output
@@ -86,6 +87,7 @@ The available operations currently are:
 - `--add-audio` — add or replace audio using a video or still image as input
 - `--extract-audio` — extract the first audio stream as MP3
 - `--remove-audio` — remove the audio stream and create H.264 MP4 output
+- `--info` — display technical media information and exit
 - `--show-metadata` — display metadata and exit
 - `--frame TIME` — capture one or more JPEG frames
 
@@ -151,6 +153,16 @@ By default, `clipcrank` refuses to overwrite an existing output file. Use `-f` o
 ```
 
 This applies to recoding, audio operations, single-frame capture, and every output in multi-frame capture. Temporary files are still used, so the existing final output is replaced only after the new output has been successfully created.
+
+## Media Information
+
+Use `--info` to display technical information about the input file without creating an output file:
+
+```sh
+./clipcrank --info input.mp4
+```
+
+This reports technical media properties using `ffprobe`, including the container format, duration and bitrate, and available video and audio stream information such as codecs, resolution, frame rate, pixel format, sample rate, and channel count. `--info` is an inspection mode and cannot be combined with output or conversion options.
 
 ## Metadata
 
