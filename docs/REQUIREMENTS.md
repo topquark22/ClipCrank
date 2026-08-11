@@ -10,7 +10,7 @@ The script is intended to be:
 - portable across environments where the required FFmpeg tools are available,
 - and robust enough to handle old or awkward media formats when `ffmpeg` can decode them.
 
-The current implementation supports H.264/AAC MP4 re-encoding, video clipping, JPEG frame capture, metadata inspection and editing, frame-rate control, and safe overwrite handling.
+The current implementation supports H.264/AAC MP4 re-encoding, video clipping, JPEG frame capture, metadata inspection and editing, frame-rate control, adding or replacing audio, and safe overwrite handling.
 
 Operations must be selected explicitly. Running the script with an input file but no operation shall print usage information rather than implicitly re-encoding the file.
 
@@ -21,6 +21,7 @@ Operations must be selected explicitly. Running the script with an input file bu
 The script shall support the following operations:
 
 - `--reencode` to create standardized H.264/AAC MP4 output,
+- `--add-audio` to add or replace audio using a video or JPEG/PNG still image as the visual input,
 - `--show-metadata` to display input metadata and exit,
 - `--frame TIME` to capture one or more JPEG still frames.
 
@@ -32,14 +33,17 @@ If no operation is selected, the script shall print a usage message and exit non
 
 The script shall:
 
-- accept one required input path argument,
+- accept one required input path argument for operations other than `--add-audio`,
+- accept one visual input path and one audio input path for `--add-audio`,
 - accept one optional output path argument when the selected operation permits output,
 - derive an output path when no explicit output path is provided,
 - reject execution when the wrong number of arguments is provided,
-- reject execution when the input file does not exist,
-- reject execution when the input path is not a regular file,
-- reject execution when the input file is not readable,
+- reject execution when an input file does not exist,
+- reject execution when an input path is not a regular file,
+- reject execution when an input file is not readable,
 - reject execution when input and output paths are the same.
+
+For `--add-audio`, the first input shall be either a video file or a JPEG/PNG still image. The second input may use any audio format that the installed `ffmpeg` can decode.
 
 ### 3. Output Naming
 
@@ -47,6 +51,10 @@ For video re-encoding, when no explicit output path is given, the script shall:
 
 - replace the input file extension with `.mp4`, if an extension exists,
 - otherwise append `.mp4` to the input path.
+
+For `--add-audio` with video input, when no explicit output path is given, the script shall derive the `.mp4` output path from the video input path.
+
+For `--add-audio` with JPEG/PNG still-image input, when no explicit output path is given, the script shall derive the output basename from the audio input filename and use an `.mp4` extension.
 
 For single-frame capture, when no explicit output path is given, the script shall append a normalized timestamp to the input base name and use a `.jpg` extension.
 
@@ -116,11 +124,43 @@ The script shall use `+faststart` for MP4 output.
 
 The script shall encode audio as AAC when audio is present.
 
-The script shall verify that an AAC encoder is available in the local `ffmpeg` environment before attempting re-encoding.
+The script shall verify that an AAC encoder is available in the local `ffmpeg` environment before attempting re-encoding or `--add-audio` output.
 
 The script shall fail with a clear error message if no AAC encoder is available.
 
-### 8. Frame Rate
+### 8. Add Audio
+
+When `--add-audio` is selected, the script shall accept:
+
+```text
+--add-audio VIDEO AUDIO [OUTPUT]
+```
+
+or:
+
+```text
+--add-audio IMAGE AUDIO [OUTPUT]
+```
+
+When the first input is video, the script shall:
+
+- use the video stream from the first input,
+- use the audio stream from the second input,
+- replace any existing audio from the video input,
+- encode output as H.264/AAC MP4.
+
+When the first input is a JPEG or PNG still image, the script shall:
+
+- loop the still image as the video source,
+- use the audio stream from the second input,
+- produce output for the duration of the audio,
+- encode output as H.264/AAC MP4.
+
+`--add-audio` shall not be accepted with `--start` or `--end`.
+
+`--preserve-metadata` shall not be accepted with still-image `--add-audio` input.
+
+### 9. Frame Rate
 
 The script shall support `--fps N` to convert output video to an explicit frame rate.
 
@@ -130,7 +170,7 @@ The script shall support `--cfr` to force constant-frame-rate output while allow
 
 Frame-rate options shall not be accepted with frame-capture operations.
 
-### 9. Video Clipping
+### 10. Video Clipping
 
 The script shall support `--start TIME` and `--end TIME` with `--reencode`.
 
@@ -152,7 +192,7 @@ The script shall:
 
 Clip timestamps are not required to be incorporated automatically into the default video output filename.
 
-### 10. JPEG Frame Capture
+### 11. JPEG Frame Capture
 
 The script shall support capture of a single JPEG frame using:
 
@@ -182,7 +222,7 @@ JPEG quality shall default to 90 when not specified.
 
 Frame capture shall not be accepted with clipping, frame-rate, or metadata-editing options.
 
-### 11. Metadata
+### 12. Metadata
 
 The script shall support display of metadata using:
 
@@ -192,7 +232,7 @@ The script shall support display of metadata using:
 
 Metadata inspection shall use `ffprobe`, shall not create output, and shall not accept output-modifying options.
 
-The script shall support the following metadata controls for re-encoded MP4 output:
+The script shall support the following metadata controls for generated MP4 output:
 
 - `--metadata KEY=VALUE`, repeatable for arbitrary metadata fields,
 - `--title TEXT`,
@@ -207,7 +247,7 @@ The script shall support the following metadata controls for re-encoded MP4 outp
 
 Metadata options shall not be accepted with frame capture.
 
-### 12. Dependency Handling
+### 13. Dependency Handling
 
 The script shall require `ffmpeg` to be installed and available on `PATH` for media-writing operations.
 
@@ -217,18 +257,18 @@ The script shall fail clearly when a required executable is unavailable.
 
 Because FFmpeg builds differ by platform and distribution, the script shall adapt to the encoders exposed by the local `ffmpeg` binary.
 
-### 13. Messaging and Exit Behavior
+### 14. Messaging and Exit Behavior
 
 The script shall:
 
 - print a usage message for invalid invocation,
 - print clear error messages to standard error,
-- print the selected video encoder during re-encoding,
+- print the selected video encoder during re-encoding and audio-addition operations,
 - print created output paths after successful operations,
 - exit non-zero on failure,
 - exit zero on success.
 
-### 14. Cleanup Behavior
+### 15. Cleanup Behavior
 
 The script shall remove partial temporary output files when an operation fails or is interrupted.
 
@@ -254,7 +294,7 @@ Tests that invoke native Windows FFmpeg tools under Cygwin shall avoid POSIX abs
 
 ### 3. Conservative Output Compatibility
 
-Standard re-encoded output should be broadly playable in common software and devices.
+Standard generated video output should be broadly playable in common software and devices.
 
 To support this, the script should:
 - use MP4 output,
@@ -297,6 +337,10 @@ At minimum, testing should cover:
 - operation-selection validation,
 - successful VP9-to-H.264 conversion of the committed Big Buck Bunny sample video,
 - verification of the input and output video codecs with `ffprobe`,
+- still-image plus audio generation using the committed Lenna and `bah.wav` fixtures,
+- video plus replacement-audio generation,
+- H.264/AAC verification of `--add-audio` output,
+- default still-image `--add-audio` output basename derived from the audio filename,
 - missing input handling,
 - invalid input path handling,
 - output-already-exists handling,
@@ -309,7 +353,9 @@ At minimum, testing should cover:
 - encoder-detection behavior,
 - cleanup of temporary output artifacts on failure.
 
-The real-video codec tests shall tolerate CRLF line endings from native Windows `ffprobe` when run under Cygwin.
+The real-media codec tests shall tolerate CRLF line endings from native Windows `ffprobe` when run under Cygwin.
+
+Generated integration-test artifacts shall be written under `tmp/` and may be retained after successful tests for manual inspection and UAT.
 
 ## Future Requirements Candidates
 
