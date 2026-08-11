@@ -86,8 +86,10 @@ run_expect_failure "same input and output path should still fail with force" "$t
 touch "$tmp_dir/existing.mp4"
 run_expect_failure "existing output should fail without force" "$target_script" --reencode "$tmp_dir/sample.flv" "$tmp_dir/existing.mp4"
 
+mkdir -p tmp
 sample_video="examples/Big_Buck_Bunny_720_10s_1MB.webm"
-reencoded_video="test/Big_Buck_Bunny_720_10s_1MB.mp4"
+reencoded_video="tmp/Big_Buck_Bunny_720_10s_1MB.mp4"
+
 rm -f "$reencoded_video"
 if [ -f "$sample_video" ] && [ "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$sample_video")" = "vp9" ]; then
     pass "example video should use VP9 codec"
