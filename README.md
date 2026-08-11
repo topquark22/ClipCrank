@@ -71,17 +71,36 @@ Actual codec support can vary between `ffmpeg` builds, so a recognized container
 ./clipcrank [OPTIONS] INPUT [OUTPUT]
 ```
 
+An operation must be selected explicitly. If no operation is specified, `clipcrank` prints its usage message and exits without processing the input.
+
+The available operations currently are:
+
+- `--recode` — recode video as standardized H.264/AAC MP4
+- `--show-metadata` — display metadata and exit
+- `--frame TIME` — capture one or more JPEG frames
+
+Only one operation may be selected at a time.
+
+### Recoding
+
+Use `--recode` to convert an input video into standardized MP4 output:
+
+```sh
+./clipcrank --recode input.mov
+./clipcrank --recode input.mov output.mp4
+```
+
 ### Overwriting existing files
 
 By default, `clipcrank` refuses to overwrite an existing output file. Use `-f` or `--force` to allow replacement:
 
 ```sh
-./clipcrank -f input.mov output.mp4
+./clipcrank --recode -f input.mov output.mp4
 ./clipcrank --force --frame 1:23.500 input.mp4 still.jpg
 ./clipcrank -f --frame 10 --interval 5 --count 4 input.mp4
 ```
 
-This applies to normal video conversion, single-frame capture, and every output in multi-frame capture. Temporary files are still used, so the existing final output is replaced only after the new output has been successfully created.
+This applies to recoding, single-frame capture, and every output in multi-frame capture. Temporary files are still used, so the existing final output is replaced only after the new output has been successfully created.
 
 ## Metadata
 
@@ -95,7 +114,7 @@ This displays container-level and stream-level metadata using `ffprobe`, then ex
 
 ## Video Clips
 
-Use `--start TIME`, `--end TIME`, or both. Times use:
+Use `--recode` together with `--start TIME`, `--end TIME`, or both. Times use:
 
 ```text
 [[h:]m:]s[.ms]
@@ -104,9 +123,9 @@ Use `--start TIME`, `--end TIME`, or both. Times use:
 Examples:
 
 ```sh
-./clipcrank --start 12.500 input.mov clip.mp4
-./clipcrank --end 2:05 input.mov clip.mp4
-./clipcrank --start 1:12.500 --end 2:05 input.mov clip.mp4
+./clipcrank --recode --start 12.500 input.mov clip.mp4
+./clipcrank --recode --end 2:05 input.mov clip.mp4
+./clipcrank --recode --start 1:12.500 --end 2:05 input.mov clip.mp4
 ```
 
 If `--start` is omitted, output begins at the start of the input. If `--end` is omitted, output continues to the end. When both are supplied, `--end` must be later than `--start`.
@@ -162,11 +181,11 @@ Without `--force`, all multi-frame target names are checked before capture start
 
 ## Frame Rate
 
-`--fps N` converts output video to an explicit frame rate. `--cfr` forces constant-frame-rate output while allowing `ffmpeg` to determine the rate. They cannot be used together.
+Use `--recode` with `--fps N` to convert output video to an explicit frame rate. `--cfr` forces constant-frame-rate output while allowing `ffmpeg` to determine the rate. They cannot be used together.
 
 ## Frame-capture option compatibility
 
-`--frame` cannot be combined with `--start`, `--end`, `--fps`, `--cfr`, or MP4 metadata options.
+`--frame` cannot be combined with `--recode`, `--show-metadata`, `--start`, `--end`, `--fps`, `--cfr`, or MP4 metadata options.
 
 ## Testing
 
