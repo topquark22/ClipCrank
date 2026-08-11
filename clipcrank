@@ -100,6 +100,7 @@ classify_visual_input() {
         ffprobe \
             -v error \
             -select_streams v:0 \
+            -show_frames \
             -show_entries frame=media_type \
             -of csv=p=0 \
             "$input" 2>/dev/null |
