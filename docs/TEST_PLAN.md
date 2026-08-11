@@ -66,7 +66,7 @@ The smoke test should normally be run from the repository root:
 ./test/smoke-test.sh
 ```
 
-The current smoke suite contains 46 tests.
+The current smoke suite contains 43 tests.
 
 ## Operations
 
@@ -593,4 +593,44 @@ After every meaningful script change, run:
 ./test/smoke-test.sh
 ```
 
-The current suite covers 46 cases,
+The current suite covers 43 cases, including:
+
+- explicit operation selection,
+- option conflicts,
+- timestamp validation,
+- hour-boundary clipping validation,
+- removed options,
+- frame option dependencies,
+- force parsing,
+- sortable frame filenames across an hour boundary,
+- metadata inspection,
+- input validation,
+- overwrite protection,
+- real VP9 fixture verification,
+- real VP9-to-H.264 re-encoding,
+- post-conversion H.264 verification,
+- still-image plus audio creation,
+- video plus replacement-audio creation,
+- H.264/AAC verification for audio-addition operations,
+- default audio-derived basename checking,
+- still-image detection independent of filename extension,
+- MP3 audio extraction,
+- MP3 codec verification,
+- mandatory `--remove-audio` output validation,
+- audio removal,
+- H.264 verification after audio removal,
+- confirmation that removed-audio output contains no audio stream.
+
+Manual regression testing should additionally include representative files with and without audio and at least one long-duration source when hour-boundary behavior is relevant.
+
+## Platform Notes
+
+The shell script is intended for POSIX-like environments with `ffmpeg` and `ffprobe` available on `PATH`.
+
+Under Cygwin, native Windows `ffmpeg.exe` and `ffprobe.exe` may not understand Cygwin absolute paths such as `/home/...`. Real-media tests therefore use repository-relative paths and assume the smoke test is launched from the repository root.
+
+Native Windows `ffprobe` may emit CRLF line endings. Automated codec and input-classification comparisons strip carriage returns before comparing values.
+
+## Conclusion
+
+The priority is confidence that ClipCrank translates simple user-facing operations into correct `ffmpeg` behavior, produces predictable and playable output, preserves safe overwrite semantics, and handles timestamps, filenames, codecs, metadata, and audio operations consistently across supported environments.
