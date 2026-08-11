@@ -21,10 +21,10 @@ tmp_dir=$(make_temp_dir); trap cleanup EXIT INT TERM HUP
 say "Running smoke tests against: $target_script"; say
 
 run_expect_failure "no arguments should fail" "$target_script"
-run_expect_failure_message "--fps and --cfr together should fail" "--fps and --cfr cannot be used together" "$target_script" --fps 30 --cfr "$tmp_dir/missing.flv"
-run_expect_failure_message "invalid start timestamp should fail" "start must be in [[h:]m:]s[.ms] form" "$target_script" --start 0:61:00 "$tmp_dir/missing.flv"
-run_expect_failure_message "clip end must be later than start" "--end must be later than --start" "$target_script" --start 60 --end 59.999 "$tmp_dir/missing.flv"
-run_expect_failure_message "clip across hour boundary should pass validation" "input file not found" "$target_script" --start 59:59 --end 1:00:01 "$tmp_dir/missing.flv"
+run_expect_failure_message "--fps and --cfr together should fail" "--fps and --cfr cannot be used together" "$target_script" --recode --fps 30 --cfr "$tmp_dir/missing.flv"
+run_expect_failure_message "invalid start timestamp should fail" "start must be in [[h:]m:]s[.ms] form" "$target_script" --recode --start 0:61:00 "$tmp_dir/missing.flv"
+run_expect_failure_message "clip end must be later than start" "--end must be later than --start" "$target_script" --recode --start 60 --end 59.999 "$tmp_dir/missing.flv"
+run_expect_failure_message "clip across hour boundary should pass validation" "input file not found" "$target_script" --recode --start 59:59 --end 1:00:01 "$tmp_dir/missing.flv"
 run_expect_failure_message "removed trim-seconds option should fail" "unknown option: --trim-seconds" "$target_script" --trim-seconds 0.04 "$tmp_dir/missing.flv"
 
 run_expect_failure_message "jpeg quality requires frame mode" "--jpeg-quality requires --frame" "$target_script" --jpeg-quality 90 "$tmp_dir/missing.flv"
@@ -35,9 +35,10 @@ run_expect_failure_message "frame interval requires count" "--interval requires 
 run_expect_failure_message "zero interval should fail" "interval must be greater than zero" "$target_script" --frame 10 --interval 0 --count 3 "$tmp_dir/missing.flv"
 run_expect_failure_message "noninteger count should fail" "count must be a positive integer" "$target_script" --frame 10 --interval 5 --count 2.5 "$tmp_dir/missing.flv"
 run_expect_failure_message "multi frame and clip should conflict" "frame capture cannot be used with --start or --end" "$target_script" --frame 10 --interval 5 --count 3 --start 1 "$tmp_dir/missing.flv"
+run_expect_failure_message "recode and frame operations should conflict" "only one operation may be specified" "$target_script" --recode --frame 10 "$tmp_dir/missing.flv"
 
-run_expect_failure "short force flag should parse" "$target_script" -f "$tmp_dir/missing.flv"
-run_expect_failure "long force flag should parse" "$target_script" --force "$tmp_dir/missing.flv"
+run_expect_failure "short force flag should parse" "$target_script" --recode -f "$tmp_dir/missing.flv"
+run_expect_failure "long force flag should parse" "$target_script" --recode --force "$tmp_dir/missing.flv"
 run_expect_failure "force with single frame should parse" "$target_script" -f --frame 10 "$tmp_dir/missing.flv"
 run_expect_failure "force with multiple frames should parse" "$target_script" --force --frame 10 --interval 5 --count 4 "$tmp_dir/missing.flv"
 
@@ -75,14 +76,15 @@ fi
 run_expect_failure_message "show metadata should reject output file" "--show-metadata does not accept an output file" "$target_script" --show-metadata "$tmp_dir/metadata.mp4" "$tmp_dir/out.mp4"
 run_expect_failure_message "show metadata should reject output options" "--show-metadata cannot be combined with output options" "$target_script" --show-metadata --start 1 "$tmp_dir/metadata.mp4"
 
-run_expect_failure "nonexistent input should fail" "$target_script" "$tmp_dir/missing.flv"
-mkdir "$tmp_dir/input-dir"; run_expect_failure "directory input should fail" "$target_script" "$tmp_dir/input-dir"
-touch "$tmp_dir/unreadable.flv"; chmod 000 "$tmp_dir/unreadable.flv"; run_expect_failure "unreadable input should fail" "$target_script" "$tmp_dir/unreadable.flv"; chmod 600 "$tmp_dir/unreadable.flv"
+run_expect_failure_message "input without operation should show usage" "Usage:" "$target_script" "$tmp_dir/metadata.mp4"
+run_expect_failure "nonexistent input should fail" "$target_script" --recode "$tmp_dir/missing.flv"
+mkdir "$tmp_dir/input-dir"; run_expect_failure "directory input should fail" "$target_script" --recode "$tmp_dir/input-dir"
+touch "$tmp_dir/unreadable.flv"; chmod 000 "$tmp_dir/unreadable.flv"; run_expect_failure "unreadable input should fail" "$target_script" --recode "$tmp_dir/unreadable.flv"; chmod 600 "$tmp_dir/unreadable.flv"
 touch "$tmp_dir/sample.flv"
-run_expect_failure "same input and output path should fail without force" "$target_script" "$tmp_dir/sample.flv" "$tmp_dir/sample.flv"
-run_expect_failure "same input and output path should still fail with force" "$target_script" -f "$tmp_dir/sample.flv" "$tmp_dir/sample.flv"
+run_expect_failure "same input and output path should fail without force" "$target_script" --recode "$tmp_dir/sample.flv" "$tmp_dir/sample.flv"
+run_expect_failure "same input and output path should still fail with force" "$target_script" --recode -f "$tmp_dir/sample.flv" "$tmp_dir/sample.flv"
 touch "$tmp_dir/existing.mp4"
-run_expect_failure "existing output should fail without force" "$target_script" "$tmp_dir/sample.flv" "$tmp_dir/existing.mp4"
+run_expect_failure "existing output should fail without force" "$target_script" --recode "$tmp_dir/sample.flv" "$tmp_dir/existing.mp4"
 
 say; say "Summary:"; say "  Passed: $pass_count"; say "  Failed: $fail_count"
 if [ "$fail_count" -ne 0 ]; then exit 1; fi
