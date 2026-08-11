@@ -66,7 +66,7 @@ The smoke test should normally be run from the repository root:
 ./test/smoke-test.sh
 ```
 
-The current smoke suite contains 46 tests.
+The current smoke suite contains 50 tests.
 
 ## Operations
 
@@ -593,7 +593,7 @@ After every meaningful script change, run:
 ./test/smoke-test.sh
 ```
 
-The current suite covers 46 cases, including:
+The current suite covers 50 cases, including:
 
 - explicit operation selection,
 - option conflicts,
