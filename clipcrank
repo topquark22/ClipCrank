@@ -9,7 +9,7 @@ metadata_args=()
 positional_args=()
 force=false
 reencode=false
-create_from=false
+add_audio=false
 
 fps=
 cfr=false
@@ -40,7 +40,7 @@ Arguments:
 
 Operations:
   --reencode                Re-encode input as standardized H.264/AAC MP4
-  --create-from             Create video from still image and audio: IMAGE AUDIO [OUTPUT]
+  --add-audio               Add or replace audio: VIDEO|IMAGE AUDIO [OUTPUT]
   --show-metadata           Display input metadata and exit
   --frame TIME              Capture JPEG frame(s) starting at [[h:]m:]s[.ms]
 
@@ -66,7 +66,8 @@ Options:
 Examples:
   $progname --reencode old-video.avi
   $progname --reencode -f input.mov output.mp4
-  $progname --create-from image.jpg soundtrack.wav output.mp4
+  $progname --add-audio input.mp4 soundtrack.wav output.mp4
+  $progname --add-audio image.jpg soundtrack.wav output.mp4
   $progname --show-metadata input.mov
   $progname --reencode --start 12.500 --end 2:05 input.mov clip.mp4
   $progname --frame 1:23.500 input.mp4
@@ -348,8 +349,8 @@ parse_args() {
                 reencode=true
                 shift
                 ;;
-            --create-from)
-                create_from=true
+            --add-audio)
+                add_audio=true
                 shift
                 ;;
             --*=*)
@@ -593,11 +594,12 @@ EOF
         "$tmp_output"
 }
 
-run_create_from() {
+run_add_audio() {
     encoder=$1
-    image_input=$2
+    media_input=$2
     audio_input=$3
     tmp_output=$4
+    input_is_image=$5
 
     encoder_args=()
     while IFS= read -r arg; do
@@ -609,6 +611,8 @@ EOF
     metadata_mode_args=()
     if [ "$clear_metadata" = true ]; then
         metadata_mode_args=( -map_metadata -1 )
+    elif [ "$preserve_metadata" = true ]; then
+        metadata_mode_args=( -map_metadata 0 )
     fi
 
     cfr_args=()
@@ -616,12 +620,21 @@ EOF
         cfr_args=( -vsync cfr )
     fi
 
+    first_input_args=()
+    shortest_args=()
+    if [ "$input_is_image" = true ]; then
+        first_input_args=( -loop 1 )
+        shortest_args=( -shortest )
+    else
+        first_input_args=( -fflags +genpts )
+    fi
+
     ffmpeg \
         -hide_banner \
         -loglevel error \
         -y \
-        -loop 1 \
-        -i "$image_input" \
+        "${first_input_args[@]}" \
+        -i "$media_input" \
         -i "$audio_input" \
         -map 0:v:0 \
         -map 1:a:0 \
@@ -636,7 +649,7 @@ EOF
         -movflags +faststart \
         -c:a aac \
         -b:a 192k \
-        -shortest \
+        "${shortest_args[@]}" \
         -f mp4 \
         "$tmp_output"
 }
@@ -663,7 +676,7 @@ parse_args "$@"
 
 operation_count=0
 [ "$reencode" = false ] || operation_count=$((operation_count + 1))
-[ "$create_from" = false ] || operation_count=$((operation_count + 1))
+[ "$add_audio" = false ] || operation_count=$((operation_count + 1))
 [ "$show_metadata" = false ] || operation_count=$((operation_count + 1))
 [ -z "$frame_time" ] || operation_count=$((operation_count + 1))
 
@@ -677,7 +690,7 @@ if [ "$operation_count" -gt 1 ]; then
     exit 2
 fi
 
-if [ "$create_from" = true ]; then
+if [ "$add_audio" = true ]; then
     if [ "${#positional_args[@]}" -lt 2 ] || [ "${#positional_args[@]}" -gt 3 ]; then
         usage >&2
         exit 2
@@ -692,7 +705,7 @@ fi
 input=${positional_args[0]}
 requested_output=${positional_args[1]:-}
 
-if [ "$create_from" = true ]; then
+if [ "$add_audio" = true ]; then
     audio_input=${positional_args[1]}
     requested_output=${positional_args[2]:-}
 fi
@@ -756,13 +769,10 @@ if [ ! -r "$input" ]; then
     exit 1
 fi
 
-if [ "$create_from" = true ]; then
+if [ "$add_audio" = true ]; then
+    input_is_image=false
     case "$input" in
-        *.jpg|*.jpeg|*.png|*.JPG|*.JPEG|*.PNG) ;;
-        *)
-            error "create-from image must use .jpg, .jpeg, or .png"
-            exit 2
-            ;;
+        *.jpg|*.jpeg|*.png|*.JPG|*.JPEG|*.PNG) input_is_image=true ;;
     esac
 
     if [ ! -e "$audio_input" ]; then
@@ -781,12 +791,12 @@ if [ "$create_from" = true ]; then
     fi
 
     if [ -n "$clip_start" ] || [ -n "$clip_end" ]; then
-        error "--create-from cannot be used with --start or --end"
+        error "--add-audio cannot be used with --start or --end"
         exit 2
     fi
 
-    if [ "$preserve_metadata" = true ]; then
-        error "--create-from cannot be used with --preserve-metadata"
+    if [ "$input_is_image" = true ] && [ "$preserve_metadata" = true ]; then
+        error "--add-audio with a still image cannot be used with --preserve-metadata"
         exit 2
     fi
 
@@ -819,7 +829,7 @@ if [ "$create_from" = true ]; then
     fi
 
     info "using video encoder: $video_encoder"
-    info "creating video from image and audio"
+    info "adding audio: $audio_input"
 
     cleanup() {
         [ ! -e "$tmp_output" ] || rm -f "$tmp_output"
@@ -827,8 +837,8 @@ if [ "$create_from" = true ]; then
 
     trap cleanup EXIT INT TERM HUP
 
-    if ! run_create_from "$video_encoder" "$input" "$audio_input" "$tmp_output"; then
-        error "video creation failed"
+    if ! run_add_audio "$video_encoder" "$input" "$audio_input" "$tmp_output" "$input_is_image"; then
+        error "audio addition failed"
         exit 1
     fi
 
