@@ -110,20 +110,38 @@ sample_image="examples/lenna.png"
 sample_audio="examples/bah.wav"
 created_video="tmp/lenna_bah.mp4"
 
-if "$target_script" --force --create-from "$sample_image" "$sample_audio" "$created_video" >/dev/null 2>&1 && [ -f "$created_video" ]; then
-    pass "create from image and audio should create output video"
+if "$target_script" --force --add-audio "$sample_image" "$sample_audio" "$created_video" >/dev/null 2>&1 && [ -f "$created_video" ]; then
+    pass "add audio to image should create output video"
 else
-    fail "create from image and audio should create output video"
+    fail "add audio to image should create output video"
 fi
 if [ -f "$created_video" ] && [ "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$created_video" | tr -d '\r')" = "h264" ]; then
-    pass "create-from output should use H.264 video"
+    pass "image add-audio output should use H.264 video"
 else
-    fail "create-from output should use H.264 video"
+    fail "image add-audio output should use H.264 video"
 fi
 if [ -f "$created_video" ] && [ "$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$created_video" | tr -d '\r')" = "aac" ]; then
-    pass "create-from output should use AAC audio"
+    pass "image add-audio output should use AAC audio"
 else
-    fail "create-from output should use AAC audio"
+    fail "image add-audio output should use AAC audio"
+fi
+
+added_audio_video="tmp/Big_Buck_Bunny_add_audio.mp4"
+
+if "$target_script" --force --add-audio "$sample_video" "$sample_audio" "$added_audio_video" >/dev/null 2>&1 && [ -f "$added_audio_video" ]; then
+    pass "add audio to video should create output video"
+else
+    fail "add audio to video should create output video"
+fi
+if [ -f "$added_audio_video" ] && [ "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$added_audio_video" | tr -d '\r')" = "h264" ]; then
+    pass "video add-audio output should use H.264 video"
+else
+    fail "video add-audio output should use H.264 video"
+fi
+if [ -f "$added_audio_video" ] && [ "$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$added_audio_video" | tr -d '\r')" = "aac" ]; then
+    pass "video add-audio output should use AAC audio"
+else
+    fail "video add-audio output should use AAC audio"
 fi
 
 say; say "Summary:"; say "  Passed: $pass_count"; say "  Failed: $fail_count"
