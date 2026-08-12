@@ -7,7 +7,7 @@
 ## Features
 
 - Converts video to H.264/AAC MP4
-- Creates clips using optional start/end times, without re-encoding when the input is already H.264/AAC
+- Creates clips using optional start/end times, re-encoding by default or copying H.264/AAC streams explicitly with `--copy-stream`
 - Captures single or multiple JPEG frames
 - Adds or replaces audio on video input
 - Creates H.264/AAC MP4 video from a still image plus audio
@@ -80,7 +80,7 @@ Actual codec support can vary between `ffmpeg` builds, so a recognized container
 ./clipcrank [OPTIONS] INPUT [OUTPUT]
 ```
 
-An operation must be selected explicitly, except that `--start` or `--end` may directly select clip creation when the input is already H.264/AAC. Otherwise, if no operation is specified, `clipcrank` prints its usage message and exits without processing the input.
+An operation must be selected explicitly, except that `--start` or `--end` may directly select clip creation. Clip creation re-encodes to H.264/AAC by default. Otherwise, if no operation is specified, `clipcrank` prints its usage message and exits without processing the input.
 
 The available operations currently are:
 
@@ -197,37 +197,33 @@ Use `--start TIME`, `--end TIME`, or both. Times use:
 [[h:]m:]s[.ms]
 ```
 
-If the input video already uses H.264 video and AAC audio, ClipCrank creates the clip by copying the existing streams without re-encoding:
+ClipCrank re-encodes clips to standardized H.264/AAC MP4 by default:
 
 ```sh
-./clipcrank --start 12.500 input.mp4 clip.mp4
-./clipcrank --end 2:05 input.mp4 clip.mp4
-./clipcrank --start 1:12.500 --end 2:05 input.mp4 clip.mp4
+./clipcrank --start 12.500 input.mov clip.mp4
+./clipcrank --end 2:05 input.mov clip.mp4
+./clipcrank --start 1:12.500 --end 2:05 input.mov clip.mp4
 ```
 
-If the input video is not already H.264/AAC, use `--reencode`:
+The explicit `--reencode` form remains valid but is not required for clipping:
 
 ```sh
-./clipcrank --reencode --start 12.500 input.mov clip.mp4
-./clipcrank --reencode --end 2:05 input.mov clip.mp4
-./clipcrank --reencode --start 1:12.500 --end 2:05 input.mov clip.mp4
+./clipcrank --reencode --start 12.500 --end 2:05 input.mov clip.mp4
 ```
 
-A video with H.264 video and no audio can also be clipped without re-encoding. If audio streams are present, they must all use AAC for stream-copy clipping.
-
-Stream-copy clipping does not create new keyframes. Before clipping with a specified `--start`, ClipCrank determines the preceding usable keyframe. If that keyframe differs from the requested start, ClipCrank reports the requested time, the keyframe time, and the difference, then asks:
-
-```text
-Continue without re-encoding? [Y/n]
-```
-
-Answering `n` cancels the operation without creating output and suggests using `--reencode` for an exact start time. The default answer is yes. Use `-y` or `--yes` to accept the adjusted stream-copy start without prompting; the informational timestamps are still printed.
+If the input already uses H.264 video and AAC audio, use `--copy-stream` to create the clip without re-encoding:
 
 ```sh
-./clipcrank -y --start 12.500 --end 20 input.mp4 clip.mp4
+./clipcrank --copy-stream --start 12.500 input.mp4 clip.mp4
+./clipcrank --copy-stream --end 2:05 input.mp4 clip.mp4
+./clipcrank --copy-stream --start 1:12.500 --end 2:05 input.mp4 clip.mp4
 ```
 
-Use `--reencode` when exact transcoded clipping or codec normalization is required.
+A video with H.264 video and no audio can also be clipped with `--copy-stream`. If audio streams are present, they must all use AAC. `--copy-stream` does not silently fall back to re-encoding if those requirements are not met.
+
+Stream-copy clipping does not create new keyframes. Before clipping with a specified `--start`, ClipCrank determines and reports the usable keyframe timestamp. When it differs from the requested start, ClipCrank also reports the difference. No confirmation prompt is used because stream copying is explicitly requested by `--copy-stream`.
+
+Use the default clipping mode when an exact transcoded start or codec normalization is required.
 
 If `--start` is omitted, output begins at the start of the input. If `--end` is omitted, output continues to the end. When both are supplied, `--end` must be later than `--start`.
 
