@@ -27,6 +27,7 @@ run_expect_failure_message "clip end must be later than start" "--end must be la
 run_expect_failure_message "clip across hour boundary should pass validation" "input file not found" "$target_script" --reencode --start 59:59 --end 1:00:01 "$tmp_dir/missing.flv"
 run_expect_failure_message "removed trim-seconds option should fail" "unknown option: --trim-seconds" "$target_script" --trim-seconds 0.04 "$tmp_dir/missing.flv"
 run_expect_failure_message "remove audio requires output file" "Usage:" "$target_script" --remove-audio "$tmp_dir/missing.mp4"
+run_expect_failure_message "remux requires output file" "Usage:" "$target_script" --remux "$tmp_dir/missing.mp4"
 
 run_expect_failure_message "jpeg quality requires frame mode" "--jpeg-quality requires --frame" "$target_script" --jpeg-quality 90 "$tmp_dir/missing.flv"
 run_expect_failure_message "removed frames option should fail" "unknown option: --frames" "$target_script" --frames 20 --interval 5 --count 2 "$tmp_dir/missing.flv"
@@ -78,6 +79,7 @@ run_expect_failure_message "show metadata should reject output file" "--show-met
 run_expect_failure_message "show metadata should reject output options" "--show-metadata cannot be combined with output options" "$target_script" --show-metadata --start 1 "$tmp_dir/metadata.mp4"
 run_expect_failure_message "info should reject output file" "--info does not accept an output file" "$target_script" --info "$tmp_dir/metadata.mp4" "$tmp_dir/out.mp4"
 run_expect_failure_message "info should reject output options" "--info cannot be combined with output options" "$target_script" --info --start 1 "$tmp_dir/metadata.mp4"
+run_expect_failure_message "remux should reject video options" "--remux cannot be combined with video or metadata options" "$target_script" --remux --fps 24 "$tmp_dir/metadata.mp4" "$tmp_dir/out.mkv"
 
 run_expect_failure_message "input without operation should show usage" "Usage:" "$target_script" "$tmp_dir/metadata.mp4"
 run_expect_failure "nonexistent input should fail" "$target_script" --reencode "$tmp_dir/missing.flv"
@@ -152,6 +154,26 @@ if output=$("$target_script" --info "$created_video" 2>&1) &&
     pass "info should summarize video with audio"
 else
     fail "info should summarize video with audio"
+fi
+
+remuxed_video="tmp/bah-remux.mkv"
+
+if "$target_script" --force --remux "$created_video" "$remuxed_video" >/dev/null 2>&1 && [ -f "$remuxed_video" ]; then
+    pass "remux should create output without re-encoding"
+else
+    fail "remux should create output without re-encoding"
+fi
+if [ -f "$remuxed_video" ] && case "$(ffprobe -v error -show_entries format=format_name -of default=noprint_wrappers=1:nokey=1 "$remuxed_video" | tr -d '\r')" in *matroska*) true ;; *) false ;; esac; then
+    pass "remux output should use requested Matroska container"
+else
+    fail "remux output should use requested Matroska container"
+fi
+if [ -f "$remuxed_video" ] &&
+   [ "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$remuxed_video" | tr -d '\r')" = "h264" ] &&
+   [ "$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$remuxed_video" | tr -d '\r')" = "aac" ]; then
+    pass "remux should preserve H.264 and AAC codecs"
+else
+    fail "remux should preserve H.264 and AAC codecs"
 fi
 
 extracted_audio="tmp/bah.mp3"
