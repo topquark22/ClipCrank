@@ -25,6 +25,7 @@ run_expect_failure_message "--fps and --cfr together should fail" "--fps and --c
 run_expect_failure_message "invalid start timestamp should fail" "start must be in [[h:]m:]s[.ms] form" "$target_script" --reencode --start 0:61:00 "$tmp_dir/missing.flv"
 run_expect_failure_message "clip end must be later than start" "--end must be later than --start" "$target_script" --reencode --start 60 --end 59.999 "$tmp_dir/missing.flv"
 run_expect_failure_message "clip across hour boundary should pass validation" "input file not found" "$target_script" --reencode --start 59:59 --end 1:00:01 "$tmp_dir/missing.flv"
+run_expect_failure_message "standalone clip should count as an operation" "input file not found" "$target_script" --start 1 "$tmp_dir/missing.mp4" "$tmp_dir/clip.mp4"
 run_expect_failure_message "removed trim-seconds option should fail" "unknown option: --trim-seconds" "$target_script" --trim-seconds 0.04 "$tmp_dir/missing.flv"
 run_expect_failure_message "remove audio requires output file" "Usage:" "$target_script" --remove-audio "$tmp_dir/missing.mp4"
 run_expect_failure_message "remux requires output file" "Usage:" "$target_script" --remux "$tmp_dir/missing.mp4"
@@ -106,6 +107,7 @@ if output=$("$target_script" --info "$sample_video" 2>&1) &&
 else
     fail "info should summarize video without audio"
 fi
+run_expect_failure_message "non-H.264 clip should require re-encoding" "input is not H.264/AAC; use --reencode with --start or --end" "$target_script" --start 1 --end 3 "$sample_video" "tmp/Big_Buck_Bunny_clip.mp4"
 if "$target_script" --force --reencode "$sample_video" "$reencoded_video" >/dev/null 2>&1 && [ -f "$reencoded_video" ]; then
     pass "example VP9 video should re-encode successfully"
 else
@@ -154,6 +156,21 @@ if output=$("$target_script" --info "$created_video" 2>&1) &&
     pass "info should summarize video with audio"
 else
     fail "info should summarize video with audio"
+fi
+
+stream_copy_clip="tmp/bah-clip.mp4"
+
+if "$target_script" --force --start 1 --end 3 "$created_video" "$stream_copy_clip" >/dev/null 2>&1 && [ -f "$stream_copy_clip" ]; then
+    pass "H.264/AAC clip should be created without --reencode"
+else
+    fail "H.264/AAC clip should be created without --reencode"
+fi
+if [ -f "$stream_copy_clip" ] &&
+   [ "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$stream_copy_clip" | tr -d '\r')" = "h264" ] &&
+   [ "$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$stream_copy_clip" | tr -d '\r')" = "aac" ]; then
+    pass "stream-copy clip should preserve H.264 and AAC codecs"
+else
+    fail "stream-copy clip should preserve H.264 and AAC codecs"
 fi
 
 remuxed_video="tmp/bah-remux.mkv"
