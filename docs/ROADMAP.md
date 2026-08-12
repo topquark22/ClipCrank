@@ -19,7 +19,7 @@ ClipCrank currently provides:
 
 - Re-encoding video as standardized H.264/AAC MP4 with `--reencode`.
 - Optional constant or explicit frame-rate conversion.
-- Video clipping with `--start` and `--end`.
+- Video clipping with `--start` and `--end`, using stream copying without `--reencode` when the input is already H.264/AAC.
 - Single and multiple JPEG frame capture.
 - Configurable JPEG quality.
 - Technical media inspection with `--info`, reporting container, duration, bitrate, and video/audio stream properties using `ffprobe`.
