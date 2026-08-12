@@ -590,4 +590,69 @@ For `--extract-audio`, verify that the output contains an MP3 audio stream and n
 
 For `--remove-audio`, verify that the output contains H.264 video and no audio stream.
 
-For clips
+For clips with both boundaries, compare duration with `end - start`. For end-only clips, compare duration with `end`. For start-only clips, confirm that output continues through the source's end.
+
+Small differences at frame or audio-sample boundaries are acceptable.
+
+## Cleanup Verification
+
+Conversion, audio, and frame-capture operations use temporary output files.
+
+Tests shall confirm that:
+
+- partial temporary files are removed after failure or interruption,
+- final output paths are populated only after successful generation,
+- integration-test output may intentionally be retained after failure for diagnosis,
+- generated real-media integration artifacts are retained under `tmp/` for inspection and overwritten on subsequent runs with `--force`.
+
+## Regression Testing
+
+After every meaningful script change, run:
+
+```sh
+./test/smoke-test.sh
+```
+
+The current suite covers 52 cases, including:
+
+- explicit operation selection,
+- option conflicts,
+- timestamp validation,
+- hour-boundary clipping validation,
+- removed options,
+- frame option dependencies,
+- force parsing,
+- sortable frame filenames across an hour boundary,
+- metadata inspection,
+- input validation,
+- overwrite protection,
+- real VP9 fixture verification,
+- real VP9-to-H.264 re-encoding,
+- post-conversion H.264 verification,
+- explicit 30-to-24 FPS conversion,
+- `ffprobe` verification of 24 FPS output,
+- still-image plus audio creation,
+- video plus replacement-audio creation,
+- H.264/AAC verification for audio-addition operations,
+- default audio-derived basename checking,
+- still-image detection independent of filename extension,
+- MP3 audio extraction,
+- MP3 codec verification,
+- mandatory `--remove-audio` output validation,
+- audio removal,
+- H.264 verification after audio removal,
+- confirmation that removed-audio output contains no audio stream.
+
+Manual regression testing should additionally include representative files with and without audio and at least one long-duration source when hour-boundary behavior is relevant.
+
+## Platform Notes
+
+The shell script is intended for POSIX-like environments with `ffmpeg` and `ffprobe` available on `PATH`.
+
+Under Cygwin, native Windows `ffmpeg.exe` and `ffprobe.exe` may not understand Cygwin absolute paths such as `/home/...`. Real-media tests therefore use repository-relative paths and assume the smoke test is launched from the repository root.
+
+Native Windows `ffprobe` may emit CRLF line endings. Automated codec and input-classification comparisons strip carriage returns before comparing values.
+
+## Conclusion
+
+The priority is confidence that ClipCrank translates simple user-facing operations into correct `ffmpeg` behavior, produces predictable and playable output, preserves safe overwrite semantics, and handles timestamps, filenames, codecs, metadata, and audio operations consistently across supported environments.
