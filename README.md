@@ -215,7 +215,19 @@ If the input video is not already H.264/AAC, use `--reencode`:
 
 A video with H.264 video and no audio can also be clipped without re-encoding. If audio streams are present, they must all use AAC for stream-copy clipping.
 
-Stream-copy clipping does not create new keyframes. As a result, the start of a stream-copy clip is constrained by existing keyframes and may not be as frame-exact as a re-encoded clip. Use `--reencode` when exact transcoded clipping or codec normalization is required.
+Stream-copy clipping does not create new keyframes. Before clipping with a specified `--start`, ClipCrank determines the preceding usable keyframe. If that keyframe differs from the requested start, ClipCrank reports the requested time, the keyframe time, and the difference, then asks:
+
+```text
+Continue without re-encoding? [Y/n]
+```
+
+Answering `n` cancels the operation without creating output and suggests using `--reencode` for an exact start time. The default answer is yes. Use `-y` or `--yes` to accept the adjusted stream-copy start without prompting; the informational timestamps are still printed.
+
+```sh
+./clipcrank -y --start 12.500 --end 20 input.mp4 clip.mp4
+```
+
+Use `--reencode` when exact transcoded clipping or codec normalization is required.
 
 If `--start` is omitted, output begins at the start of the input. If `--end` is omitted, output continues to the end. When both are supplied, `--end` must be later than `--start`.
 
