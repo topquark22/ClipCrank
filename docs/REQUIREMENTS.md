@@ -261,6 +261,20 @@ If the input is not eligible, the script shall fail clearly and require the user
 
 Standalone stream-copy clipping shall not accept frame-rate or metadata-editing options.
 
+When standalone stream-copy clipping includes `--start`, the script shall use `ffprobe` to determine the preceding usable video keyframe. If the keyframe timestamp differs from the requested start timestamp, the script shall print the requested timestamp, the keyframe timestamp, and the difference before creating output.
+
+When such an adjustment is required, the script shall prompt:
+
+```text
+Continue without re-encoding? [Y/n]
+```
+
+The default response shall be yes. A response of `n` or `no` shall cancel the operation without creating output and shall advise the user to use `--reencode` for an exact start time.
+
+The script shall support `-y` and `--yes` to accept a keyframe-adjusted stream-copy start without prompting. This option shall not suppress the informational timestamp messages.
+
+If the requested start already corresponds to the usable keyframe, no confirmation prompt shall be required. End-only stream-copy clipping shall not require a keyframe confirmation prompt.
+
 Stream-copy clipping is constrained by existing keyframes and is not required to be frame-exact at the requested start timestamp. `--reencode` remains available when exact transcoded clipping or codec normalization is required.
 
 Clip timestamps are not required to be incorporated automatically into the default video output filename.
@@ -359,7 +373,7 @@ Sections that do not apply to the input shall be omitted or clearly reported as 
 
 The script shall require `ffmpeg` to be installed and available on `PATH` for media-writing operations.
 
-The script shall require `ffprobe` to be installed and available on `PATH` for metadata inspection, planned `--info` media inspection, `--add-audio` visual-input classification, and standalone clip codec validation.
+The script shall require `ffprobe` to be installed and available on `PATH` for metadata inspection, planned `--info` media inspection, `--add-audio` visual-input classification, standalone clip codec validation, and stream-copy keyframe inspection.
 
 The script shall fail clearly when a required executable is unavailable.
 
@@ -474,6 +488,9 @@ At minimum, testing should cover:
 - rejection of standalone clipping for non-H.264/AAC input with guidance to use `--reencode`,
 - successful stream-copy clipping of H.264/AAC input,
 - preservation of H.264/AAC codecs in stream-copy clip output,
+- reporting of the requested and usable keyframe start timestamps when they differ,
+- `-y` / `--yes` suppression of the confirmation prompt without suppressing informational output,
+- cancellation without output when the user declines an adjusted stream-copy start,
 - successful VP9-to-H.264 conversion of the committed Big Buck Bunny sample video,
 - verification of the input and output video codecs with `ffprobe`,
 - still-image plus audio creation using the committed Lenna and `bah.wav` fixtures,
