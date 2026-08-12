@@ -115,6 +115,19 @@ else
     fail "re-encoded example video should use H.264 codec"
 fi
 
+fps_video="tmp/Big_Buck_Bunny_24fps.mp4"
+
+if "$target_script" --force --reencode --fps 24 "$sample_video" "$fps_video" >/dev/null 2>&1 && [ -f "$fps_video" ]; then
+    pass "example video should re-encode at 24 FPS"
+else
+    fail "example video should re-encode at 24 FPS"
+fi
+if [ -f "$fps_video" ] && [ "$(ffprobe -v error -select_streams v:0 -show_entries stream=r_frame_rate -of default=noprint_wrappers=1:nokey=1 "$fps_video" | tr -d '\r')" = "24/1" ]; then
+    pass "24 FPS output should report 24/1 frame rate"
+else
+    fail "24 FPS output should report 24/1 frame rate"
+fi
+
 sample_image="examples/lenna.png"
 sample_audio="examples/bah.wav"
 created_video="tmp/$(basename "${sample_audio%.*}").mp4"
