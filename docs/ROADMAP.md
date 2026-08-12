@@ -30,6 +30,7 @@ ClipCrank currently provides:
 - For still-image `--add-audio`, the image is looped for the duration of the supplied audio and the default output basename is derived from the audio filename.
 - Extracting the first audio stream to MP3 with `--extract-audio`, with `.mp3` default output naming.
 - Removing audio with `--remove-audio`, producing H.264 MP4 output with no audio stream and requiring an explicit output filename.
+- Remuxing media to a different container with `--remux` using stream copying and no fallback re-encoding.
 - Safe overwrite handling with `--force`.
 
 ## Near-Term Priorities
@@ -143,18 +144,6 @@ Build on the existing multi-frame capture support to generate thumbnail/contact 
 ### Fade In and Fade Out
 
 Support simple audio and video fades with configurable durations.
-
-### Remux Without Re-Encoding
-
-Allow container changes when the existing codecs are already compatible with the target container.
-
-Possible interface:
-
-```sh
-clipcrank --remux input.mkv output.mp4
-```
-
-This should use stream copying and avoid generation loss whenever possible.
 
 ### Video Quality and Compression Presets
 
