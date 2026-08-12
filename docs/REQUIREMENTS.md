@@ -12,7 +12,7 @@ The script is intended to be:
 
 The current implementation supports H.264/AAC MP4 re-encoding, video clipping, JPEG frame capture, metadata inspection and editing, frame-rate control, audio addition or replacement, still-image plus audio video creation, MP3 audio extraction, audio removal, container remuxing, and safe overwrite handling.
 
-Operations must normally be selected explicitly. `--start` or `--end` may select clip creation directly when the input is already suitable for H.264/AAC stream copying. Running the script with an input file but no operation or clip boundary shall print usage information rather than implicitly re-encoding the file.
+Operations must normally be selected explicitly. `--start` or `--end` may select clip creation directly, with re-encoding as the default behavior. Running the script with an input file but no operation or clip boundary shall print usage information rather than implicitly re-encoding the file.
 
 ## Functional Requirements
 
@@ -32,7 +32,9 @@ The planned `--info` operation shall provide concise technical media information
 
 Only one operation may be selected per invocation.
 
-`--start` or `--end` without another operation shall select clip creation. If the input is not eligible for H.264/AAC stream-copy clipping, the invocation shall fail and instruct the user to add `--reencode`.
+`--start` or `--end` without another operation shall select clip creation and shall re-encode the clip to standardized H.264/AAC MP4 by default.
+
+`--copy-stream` shall be available as an explicit clipping option to request stream copying instead of re-encoding.
 
 If no operation or clip boundary is selected, the script shall print a usage message and exit non-zero.
 
@@ -106,7 +108,7 @@ With `--force`, an existing final output shall be replaced only after the new te
 
 ### 5. Re-encoding Behavior
 
-When `--reencode` is selected, the script shall invoke `ffmpeg` to:
+When `--reencode` is selected, or when clipping is requested without `--copy-stream`, the script shall invoke `ffmpeg` to:
 
 - read the input media file,
 - include the first video stream,
@@ -230,7 +232,7 @@ Frame-rate options shall not be accepted with frame-capture operations.
 
 ### 12. Video Clipping
 
-The script shall support `--start TIME` and `--end TIME` either with `--reencode` or as a standalone clip operation when stream copying is possible.
+The script shall support `--start TIME` and `--end TIME`. Clipping shall re-encode to standardized H.264/AAC MP4 by default. The explicit `--reencode` form shall remain valid but shall not be required.
 
 Accepted timestamps shall use:
 
@@ -248,34 +250,28 @@ The script shall:
 - reject invalid minute or second fields,
 - reject clipping options when frame capture is selected.
 
-When `--start` or `--end` is used without `--reencode`, the script shall use `ffprobe` to verify that:
+The script shall support `--copy-stream` only in combination with `--start` or `--end`.
+
+`--copy-stream` shall not be accepted with `--reencode` or another primary operation.
+
+When `--copy-stream` is used, the script shall use `ffprobe` to verify that:
 
 - the first video stream uses H.264,
 - every audio stream, if present, uses AAC.
 
 H.264 video with no audio stream shall be eligible for stream-copy clipping.
 
-If the input is eligible, the script shall create MP4 output by copying the existing video and audio streams without re-encoding.
+If the input is eligible, `--copy-stream` shall create MP4 output by copying the existing video and audio streams without re-encoding.
 
-If the input is not eligible, the script shall fail clearly and require the user to specify `--reencode`.
+If the input is not eligible, `--copy-stream` shall fail clearly and shall not silently fall back to re-encoding.
 
-Standalone stream-copy clipping shall not accept frame-rate or metadata-editing options.
+`--copy-stream` clipping shall not accept frame-rate or metadata-editing options.
 
-When standalone stream-copy clipping includes `--start`, the script shall use `ffprobe` to determine the preceding usable video keyframe. If the keyframe timestamp differs from the requested start timestamp, the script shall print the requested timestamp, the keyframe timestamp, and the difference before creating output.
+When `--copy-stream` clipping includes `--start`, the script shall use `ffprobe` to determine the preceding usable video keyframe and shall print the requested timestamp and actual keyframe timestamp before creating output. If they differ, the script shall also print the difference.
 
-When such an adjustment is required, the script shall prompt:
+No confirmation prompt shall be used for keyframe adjustment because stream copying has been explicitly requested by the user.
 
-```text
-Continue without re-encoding? [Y/n]
-```
-
-The default response shall be yes. A response of `n` or `no` shall cancel the operation without creating output and shall advise the user to use `--reencode` for an exact start time.
-
-The script shall support `-y` and `--yes` to accept a keyframe-adjusted stream-copy start without prompting. This option shall not suppress the informational timestamp messages.
-
-If the requested start already corresponds to the usable keyframe, no confirmation prompt shall be required. End-only stream-copy clipping shall not require a keyframe confirmation prompt.
-
-Stream-copy clipping is constrained by existing keyframes and is not required to be frame-exact at the requested start timestamp. `--reencode` remains available when exact transcoded clipping or codec normalization is required.
+Stream-copy clipping is constrained by existing keyframes and is not required to be frame-exact at the requested start timestamp. Default clipping remains available when exact transcoded clipping or codec normalization is required.
 
 Clip timestamps are not required to be incorporated automatically into the default video output filename.
 
@@ -373,7 +369,7 @@ Sections that do not apply to the input shall be omitted or clearly reported as 
 
 The script shall require `ffmpeg` to be installed and available on `PATH` for media-writing operations.
 
-The script shall require `ffprobe` to be installed and available on `PATH` for metadata inspection, planned `--info` media inspection, `--add-audio` visual-input classification, standalone clip codec validation, and stream-copy keyframe inspection.
+The script shall require `ffprobe` to be installed and available on `PATH` for metadata inspection, planned `--info` media inspection, `--add-audio` visual-input classification, `--copy-stream` codec validation, and stream-copy keyframe inspection.
 
 The script shall fail clearly when a required executable is unavailable.
 
@@ -485,12 +481,14 @@ At minimum, testing should cover:
 
 - operation-selection validation,
 - standalone clip operation selection with `--start` or `--end`,
-- rejection of standalone clipping for non-H.264/AAC input with guidance to use `--reencode`,
-- successful stream-copy clipping of H.264/AAC input,
+- default re-encoding of clips without requiring `--reencode`,
+- H.264 verification of default clip output from non-H.264 input,
+- `--copy-stream` requirement for a clip boundary,
+- rejection of `--copy-stream` with `--reencode` or another operation,
+- rejection of `--copy-stream` for non-H.264/AAC input,
+- successful `--copy-stream` clipping of H.264/AAC input,
 - preservation of H.264/AAC codecs in stream-copy clip output,
-- reporting of the requested and usable keyframe start timestamps when they differ,
-- `-y` / `--yes` suppression of the confirmation prompt without suppressing informational output,
-- cancellation without output when the user declines an adjusted stream-copy start,
+- reporting of the requested and usable keyframe start timestamps for `--copy-stream`,
 - successful VP9-to-H.264 conversion of the committed Big Buck Bunny sample video,
 - verification of the input and output video codecs with `ffprobe`,
 - still-image plus audio creation using the committed Lenna and `bah.wav` fixtures,
