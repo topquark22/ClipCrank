@@ -8,7 +8,7 @@ clear_metadata=false
 metadata_args=()
 positional_args=()
 force=false
-yes=false
+copy_stream=false
 reencode=false
 add_audio=false
 extract_audio=false
@@ -55,7 +55,7 @@ Operations:
 
 Options:
   -f, --force              Overwrite existing output files
-  -y, --yes                Accept an adjusted stream-copy clip start without prompting
+  --copy-stream            Copy streams when clipping instead of re-encoding
   --metadata KEY=VALUE     Set an MP4 metadata field; may be repeated
   --title TEXT             Set title metadata
   --artist TEXT            Set artist metadata
@@ -84,7 +84,7 @@ Examples:
   $progname --info input.mov
   $progname --show-metadata input.mov
   $progname --start 12.500 --end 2:05 input.mp4 clip.mp4
-  $progname -y --start 12.500 --end 2:05 input.mp4 clip.mp4
+  $progname --copy-stream --start 12.500 --end 2:05 input.mp4 clip.mp4
   $progname --reencode --start 12.500 --end 2:05 input.mov clip.mp4
   $progname --frame 1:23.500 input.mp4
   $progname --frame 10 --interval 5 --count 4 input.mp4
@@ -567,8 +567,8 @@ parse_args() {
                 force=true
                 shift
                 ;;
-            -y|--yes)
-                yes=true
+            --copy-stream)
+                copy_stream=true
                 shift
                 ;;
             --reencode)
@@ -1052,6 +1052,16 @@ if [ "$operation_count" -gt 1 ]; then
     exit 2
 fi
 
+if [ "$copy_stream" = true ] && [ "$clip_requested" = false ]; then
+    error "--copy-stream requires --start or --end"
+    exit 2
+fi
+
+if [ "$copy_stream" = true ] && [ "$operation_count" -ne 0 ]; then
+    error "--copy-stream cannot be combined with another operation"
+    exit 2
+fi
+
 if [ "$add_audio" = true ]; then
     if [ "${#positional_args[@]}" -lt 2 ] || [ "${#positional_args[@]}" -gt 3 ]; then
         usage >&2
@@ -1171,14 +1181,14 @@ if [ ! -r "$input" ]; then
     exit 1
 fi
 
-if [ "$operation_count" -eq 0 ] && [ "$clip_requested" = true ]; then
+if [ "$copy_stream" = true ]; then
     if [ -n "$fps" ] || [ "$cfr" = true ] || [ "$preserve_metadata" = true ] || [ "$clear_metadata" = true ] || [ "${#metadata_args[@]}" -gt 0 ]; then
-        error "clipping without --reencode cannot be combined with frame-rate or metadata options"
+        error "--copy-stream cannot be combined with frame-rate or metadata options"
         exit 2
     fi
 
     if ! clip_can_stream_copy "$input"; then
-        error "input is not H.264/AAC; use --reencode with --start or --end"
+        error "--copy-stream requires H.264 video with AAC audio, if audio is present"
         exit 2
     fi
 
@@ -1189,21 +1199,10 @@ if [ "$operation_count" -eq 0 ] && [ "$clip_requested" = true ]; then
         fi
 
         difference=$(awk "BEGIN {printf \"%.3f\", $clip_start_seconds - $stream_copy_start}")
+        info "requested start: $clip_start_seconds"
+        info "stream-copy keyframe start: $stream_copy_start"
         if awk "BEGIN {exit !($difference > 0.0005)}"; then
-            info "requested start: $clip_start_seconds"
-            info "stream-copy keyframe start: $stream_copy_start"
             info "difference: $difference seconds"
-
-            if [ "$yes" = false ]; then
-                printf 'Continue without re-encoding? [Y/n] '
-                IFS= read -r answer || answer=
-                case "$answer" in
-                    n|N|no|NO|No)
-                        info "cancelled; use --reencode for an exact start time"
-                        exit 0
-                        ;;
-                esac
-            fi
         fi
     fi
 
