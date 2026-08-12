@@ -22,6 +22,7 @@ ClipCrank currently provides:
 - Video clipping with `--start` and `--end`.
 - Single and multiple JPEG frame capture.
 - Configurable JPEG quality.
+- Technical media inspection with `--info`, reporting container, duration, bitrate, and video/audio stream properties using `ffprobe`.
 - Metadata inspection with `--show-metadata`.
 - Metadata preservation, clearing, and explicit metadata editing.
 - Adding or replacing audio with `--add-audio` for either video input or any still-image format supported by the installed FFmpeg build.
@@ -32,35 +33,6 @@ ClipCrank currently provides:
 - Safe overwrite handling with `--force`.
 
 ## Near-Term Priorities
-
-### Media Information with `--info`
-
-Add a separate read-only `--info` operation for concise technical media information. `--show-metadata` should remain limited to descriptive metadata tags stored in the file; `--info` should report technical properties of the media itself.
-
-Possible interface:
-
-```sh
-clipcrank --info input.mp4
-```
-
-The output should report useful properties in a concise, human-readable form, including where applicable:
-
-- container format
-- duration
-- overall bitrate
-- video codec
-- resolution
-- frame rate
-- pixel format
-- video bitrate
-- audio codec
-- sample rate
-- channel count
-- audio bitrate
-
-Sections that do not apply to the input should be omitted or clearly reported as absent. For example, an audio-only file should not display a Video section, and a video with no audio should report no audio stream.
-
-`--info` should use `ffprobe`, create no output file, accept exactly one input file, and reject output-modifying options. The objective is a friendlier summary than raw `ffprobe` output while keeping `--show-metadata` semantically focused on stored metadata tags.
 
 ### Resize and Scale
 
