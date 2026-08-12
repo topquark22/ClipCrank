@@ -7,7 +7,7 @@
 ## Features
 
 - Converts video to H.264/AAC MP4
-- Creates clips using optional start/end times
+- Creates clips using optional start/end times, without re-encoding when the input is already H.264/AAC
 - Captures single or multiple JPEG frames
 - Adds or replaces audio on video input
 - Creates H.264/AAC MP4 video from a still image plus audio
@@ -80,7 +80,7 @@ Actual codec support can vary between `ffmpeg` builds, so a recognized container
 ./clipcrank [OPTIONS] INPUT [OUTPUT]
 ```
 
-An operation must be selected explicitly. If no operation is specified, `clipcrank` prints its usage message and exits without processing the input.
+An operation must be selected explicitly, except that `--start` or `--end` may directly select clip creation when the input is already H.264/AAC. Otherwise, if no operation is specified, `clipcrank` prints its usage message and exits without processing the input.
 
 The available operations currently are:
 
@@ -167,7 +167,7 @@ By default, `clipcrank` refuses to overwrite an existing output file. Use `-f` o
 ./clipcrank -f --frame 10 --interval 5 --count 4 input.mp4
 ```
 
-This applies to recoding, audio operations, remuxing, single-frame capture, and every output in multi-frame capture. Temporary files are still used, so the existing final output is replaced only after the new output has been successfully created.
+This applies to recoding, clipping, audio operations, remuxing, single-frame capture, and every output in multi-frame capture. Temporary files are still used, so the existing final output is replaced only after the new output has been successfully created.
 
 ## Media Information
 
@@ -191,19 +191,31 @@ This displays container-level and stream-level metadata using `ffprobe`, then ex
 
 ## Video Clips
 
-Use `--reencode` together with `--start TIME`, `--end TIME`, or both. Times use:
+Use `--start TIME`, `--end TIME`, or both. Times use:
 
 ```text
 [[h:]m:]s[.ms]
 ```
 
-Examples:
+If the input video already uses H.264 video and AAC audio, ClipCrank creates the clip by copying the existing streams without re-encoding:
+
+```sh
+./clipcrank --start 12.500 input.mp4 clip.mp4
+./clipcrank --end 2:05 input.mp4 clip.mp4
+./clipcrank --start 1:12.500 --end 2:05 input.mp4 clip.mp4
+```
+
+If the input video is not already H.264/AAC, use `--reencode`:
 
 ```sh
 ./clipcrank --reencode --start 12.500 input.mov clip.mp4
 ./clipcrank --reencode --end 2:05 input.mov clip.mp4
 ./clipcrank --reencode --start 1:12.500 --end 2:05 input.mov clip.mp4
 ```
+
+A video with H.264 video and no audio can also be clipped without re-encoding. If audio streams are present, they must all use AAC for stream-copy clipping.
+
+Stream-copy clipping does not create new keyframes. As a result, the start of a stream-copy clip is constrained by existing keyframes and may not be as frame-exact as a re-encoded clip. Use `--reencode` when exact transcoded clipping or codec normalization is required.
 
 If `--start` is omitted, output begins at the start of the input. If `--end` is omitted, output continues to the end. When both are supplied, `--end` must be later than `--start`.
 
