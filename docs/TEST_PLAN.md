@@ -16,6 +16,7 @@ The test plan aims to confirm that `clipcrank`:
 - re-encodes supported input media into standardized H.264/AAC MP4 output,
 - stream-copies clips when input is already H.264/AAC,
 - requires `--reencode` for clipping input that is not H.264/AAC,
+- reports keyframe-adjusted stream-copy starts and allows confirmation or `-y` / `--yes` bypass,
 - selects a working H.264 encoder from the local `ffmpeg` environment,
 - uses AAC audio when audio is present,
 - adds or replaces audio on video input,
@@ -69,7 +70,7 @@ The smoke test should normally be run from the repository root:
 ./test/smoke-test.sh
 ```
 
-The current smoke suite contains 61 tests.
+The current smoke suite contains 65 tests.
 
 ## Operations
 
@@ -365,16 +366,35 @@ In three-field form, minutes and seconds must be between 0 and 59. In two-field 
 The generated H.264/AAC fixture can be clipped without `--reencode`:
 
 ```sh
-./clipcrank --force --start 1 --end 3 tmp/bah.mp4 tmp/bah-clip.mp4
+./clipcrank --force -y --start 1 --end 3 tmp/bah.mp4 tmp/bah-clip.mp4
 ```
 
 Expected:
 - output file exists,
 - video codec remains H.264,
 - audio codec remains AAC,
-- no video or audio re-encoding is performed.
+- no video or audio re-encoding is performed,
+- if the requested start is not itself a usable keyframe, the requested start, keyframe start, and difference are printed,
+- `-y` suppresses the confirmation prompt but does not suppress those informational messages.
 
-The automated smoke suite verifies both successful output creation and codec preservation with `ffprobe`.
+The automated smoke suite verifies successful output creation, codec preservation, keyframe-adjustment reporting, and noninteractive `-y` behavior.
+
+### Keyframe-adjustment confirmation
+
+Run a stream-copy clip with a requested start that does not coincide with a usable keyframe and omit `-y` / `--yes`.
+
+Expected output includes information equivalent to:
+
+```text
+clipcrank: requested start: 1.000
+clipcrank: stream-copy keyframe start: 0.000
+clipcrank: difference: 1.000 seconds
+Continue without re-encoding? [Y/n]
+```
+
+The exact keyframe timestamp depends on the source file. Answering `n` shall exit successfully without creating the requested output and shall advise using `--reencode` for an exact start time.
+
+The smoke suite also verifies that `--yes` parses correctly and that `-y` suppresses only the prompt, not the informational timestamp output.
 
 ### Non-H.264/AAC input requires re-encoding
 
@@ -728,15 +748,19 @@ After every meaningful script change, run:
 ./test/smoke-test.sh
 ```
 
-The current suite covers 61 cases, including:
+The current suite covers 65 cases, including:
 
 - explicit operation selection,
 - standalone clip operation selection,
+- `--yes` parsing,
 - option conflicts,
 - timestamp validation,
 - hour-boundary clipping validation,
 - rejection of standalone clipping for non-H.264/AAC input,
 - H.264/AAC stream-copy clip creation,
+- reporting of requested and keyframe-adjusted stream-copy starts,
+- `-y` suppression of the confirmation prompt,
+- cancellation without output when the user declines the adjusted stream-copy start,
 - H.264/AAC codec preservation during stream-copy clipping,
 - removed options,
 - frame option dependencies,
