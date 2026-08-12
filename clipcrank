@@ -1042,6 +1042,11 @@ if [ -n "$clip_start" ] || [ -n "$clip_end" ]; then
     clip_requested=true
 fi
 
+if [ "$copy_stream" = true ] && [ "$clip_requested" = false ]; then
+    error "--copy-stream requires --start or --end"
+    exit 2
+fi
+
 if [ "$operation_count" -eq 0 ] && [ "$clip_requested" = false ]; then
     usage >&2
     exit 2
@@ -1049,11 +1054,6 @@ fi
 
 if [ "$operation_count" -gt 1 ]; then
     error "only one operation may be specified"
-    exit 2
-fi
-
-if [ "$copy_stream" = true ] && [ "$clip_requested" = false ]; then
-    error "--copy-stream requires --start or --end"
     exit 2
 fi
 
