@@ -12,7 +12,7 @@ The script is intended to be:
 
 The current implementation supports H.264/AAC MP4 re-encoding, video clipping, JPEG frame capture, metadata inspection and editing, frame-rate control, audio addition or replacement, still-image plus audio video creation, MP3 audio extraction, audio removal, container remuxing, and safe overwrite handling.
 
-Operations must be selected explicitly. Running the script with an input file but no operation shall print usage information rather than implicitly re-encoding the file.
+Operations must normally be selected explicitly. `--start` or `--end` may select clip creation directly when the input is already suitable for H.264/AAC stream copying. Running the script with an input file but no operation or clip boundary shall print usage information rather than implicitly re-encoding the file.
 
 ## Functional Requirements
 
@@ -32,7 +32,9 @@ The planned `--info` operation shall provide concise technical media information
 
 Only one operation may be selected per invocation.
 
-If no operation is selected, the script shall print a usage message and exit non-zero.
+`--start` or `--end` without another operation shall select clip creation. If the input is not eligible for H.264/AAC stream-copy clipping, the invocation shall fail and instruct the user to add `--reencode`.
+
+If no operation or clip boundary is selected, the script shall print a usage message and exit non-zero.
 
 ### 2. Input Handling
 
@@ -63,6 +65,8 @@ For video re-encoding, when no explicit output path is given, the script shall:
 
 - replace the input file extension with `.mp4`, if an extension exists,
 - otherwise append `.mp4` to the input path.
+
+For stream-copy clipping, the same derived `.mp4` output naming rule shall apply when no explicit output path is given.
 
 For `--add-audio` with video input, the default output path shall be derived from the video input path.
 
@@ -226,7 +230,7 @@ Frame-rate options shall not be accepted with frame-capture operations.
 
 ### 12. Video Clipping
 
-The script shall support `--start TIME` and `--end TIME` with `--reencode`.
+The script shall support `--start TIME` and `--end TIME` either with `--reencode` or as a standalone clip operation when stream copying is possible.
 
 Accepted timestamps shall use:
 
@@ -243,6 +247,21 @@ The script shall:
 - require `--end` to be later than `--start` when both are supplied,
 - reject invalid minute or second fields,
 - reject clipping options when frame capture is selected.
+
+When `--start` or `--end` is used without `--reencode`, the script shall use `ffprobe` to verify that:
+
+- the first video stream uses H.264,
+- every audio stream, if present, uses AAC.
+
+H.264 video with no audio stream shall be eligible for stream-copy clipping.
+
+If the input is eligible, the script shall create MP4 output by copying the existing video and audio streams without re-encoding.
+
+If the input is not eligible, the script shall fail clearly and require the user to specify `--reencode`.
+
+Standalone stream-copy clipping shall not accept frame-rate or metadata-editing options.
+
+Stream-copy clipping is constrained by existing keyframes and is not required to be frame-exact at the requested start timestamp. `--reencode` remains available when exact transcoded clipping or codec normalization is required.
 
 Clip timestamps are not required to be incorporated automatically into the default video output filename.
 
@@ -340,7 +359,7 @@ Sections that do not apply to the input shall be omitted or clearly reported as 
 
 The script shall require `ffmpeg` to be installed and available on `PATH` for media-writing operations.
 
-The script shall require `ffprobe` to be installed and available on `PATH` for metadata inspection, planned `--info` media inspection, and `--add-audio` visual-input classification.
+The script shall require `ffprobe` to be installed and available on `PATH` for metadata inspection, planned `--info` media inspection, `--add-audio` visual-input classification, and standalone clip codec validation.
 
 The script shall fail clearly when a required executable is unavailable.
 
@@ -451,6 +470,10 @@ The project shall be tested using both:
 At minimum, testing should cover:
 
 - operation-selection validation,
+- standalone clip operation selection with `--start` or `--end`,
+- rejection of standalone clipping for non-H.264/AAC input with guidance to use `--reencode`,
+- successful stream-copy clipping of H.264/AAC input,
+- preservation of H.264/AAC codecs in stream-copy clip output,
 - successful VP9-to-H.264 conversion of the committed Big Buck Bunny sample video,
 - verification of the input and output video codecs with `ffprobe`,
 - still-image plus audio creation using the committed Lenna and `bah.wav` fixtures,
