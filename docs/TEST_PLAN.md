@@ -12,8 +12,10 @@ The project is small, so the testing approach is intentionally practical:
 
 The test plan aims to confirm that `clipcrank`:
 
-- requires an explicit operation,
+- requires an explicit operation or clip boundary,
 - re-encodes supported input media into standardized H.264/AAC MP4 output,
+- stream-copies clips when input is already H.264/AAC,
+- requires `--reencode` for clipping input that is not H.264/AAC,
 - selects a working H.264 encoder from the local `ffmpeg` environment,
 - uses AAC audio when audio is present,
 - adds or replaces audio on video input,
@@ -67,7 +69,7 @@ The smoke test should normally be run from the repository root:
 ./test/smoke-test.sh
 ```
 
-The current smoke suite contains 57 tests.
+The current smoke suite contains 61 tests.
 
 ## Operations
 
@@ -83,9 +85,9 @@ ClipCrank currently exposes these primary operations:
 --frame TIME
 ```
 
-Only one operation may be selected at a time.
+Only one operation may be selected at a time. `--start` or `--end` may also select standalone clip creation when the input is eligible for H.264/AAC stream copying.
 
-Running `clipcrank` without an operation shall print Usage and exit non-zero.
+Running `clipcrank` without an operation or clip boundary shall print Usage and exit non-zero.
 
 ## Re-encoding Tests
 
@@ -356,9 +358,45 @@ When fewer fields are supplied, omitted higher-order fields default to zero.
 
 In three-field form, minutes and seconds must be between 0 and 59. In two-field form, seconds must be between 0 and 59. A seconds-only value may exceed 59 and is interpreted as total seconds.
 
-## Manual Clip Tests
+## Clip Tests
 
-### Start and end
+### Standalone H.264/AAC stream-copy clip
+
+The generated H.264/AAC fixture can be clipped without `--reencode`:
+
+```sh
+./clipcrank --force --start 1 --end 3 tmp/bah.mp4 tmp/bah-clip.mp4
+```
+
+Expected:
+- output file exists,
+- video codec remains H.264,
+- audio codec remains AAC,
+- no video or audio re-encoding is performed.
+
+The automated smoke suite verifies both successful output creation and codec preservation with `ffprobe`.
+
+### Non-H.264/AAC input requires re-encoding
+
+The Big Buck Bunny fixture uses VP9 and therefore shall not be stream-copied into a standard ClipCrank MP4 clip:
+
+```sh
+./clipcrank --start 1 --end 3 \
+  examples/Big_Buck_Bunny_720_10s_1MB.webm \
+  tmp/Big_Buck_Bunny_clip.mp4
+```
+
+Expected: the command fails with guidance to use `--reencode`.
+
+The equivalent re-encoding invocation remains valid:
+
+```sh
+./clipcrank --reencode --start 1 --end 3 \
+  examples/Big_Buck_Bunny_720_10s_1MB.webm \
+  tmp/Big_Buck_Bunny_clip.mp4
+```
+
+### Start and end with re-encoding
 
 ```sh
 ./clipcrank --reencode --start 10.250 --end 20.750 input.mp4 clip.mp4
@@ -392,6 +430,8 @@ Expected: starts at the beginning and ends at 2 minutes 5 seconds.
 ```
 
 Expected: produces an approximately two-second clip crossing the one-hour boundary.
+
+Stream-copy clipping is constrained by existing keyframes, so its requested start time is not required to be frame-exact. Re-encoded clipping remains the appropriate path when frame-exact transcoded output is required.
 
 ## Frame Capture Tests
 
@@ -562,7 +602,7 @@ Expected: failure without modifying the existing file.
 
 Expected: successful replacement after the new output has been created successfully.
 
-The same behavior applies to audio operations, remuxing, single-frame output, and multiple-frame output.
+The same behavior applies to clipping, audio operations, remuxing, single-frame output, and multiple-frame output.
 
 Input and output paths that refer to the same file shall be rejected even when `--force` is supplied.
 
@@ -657,19 +697,21 @@ For standard re-encoded and `--add-audio` output, verify as applicable:
 - `yuv420p` pixel format,
 - even-numbered output dimensions.
 
+For stream-copy clips, verify H.264 video and AAC audio where audio is present. Codec names shall remain unchanged because no re-encoding occurs.
+
 For `--extract-audio`, verify that the output contains an MP3 audio stream and no video stream.
 
 For `--remove-audio`, verify that the output contains H.264 video and no audio stream.
 
 For `--remux`, verify the requested target container and confirm that the video and audio codec names are unchanged from the source.
 
-For clips with both boundaries, compare duration with `end - start`. For end-only clips, compare duration with `end`. For start-only clips, confirm that output continues through the source's end.
+For re-encoded clips with both boundaries, compare duration with `end - start`. For end-only clips, compare duration with `end`. For start-only clips, confirm that output continues through the source's end.
 
-Small differences at frame or audio-sample boundaries are acceptable.
+Small differences at frame or audio-sample boundaries are acceptable. Stream-copy clip starts may differ more because they are constrained by existing keyframes.
 
 ## Cleanup Verification
 
-Conversion, audio, remux, and frame-capture operations use temporary output files.
+Conversion, clipping, audio, remux, and frame-capture operations use temporary output files.
 
 Tests shall confirm that:
 
@@ -686,12 +728,16 @@ After every meaningful script change, run:
 ./test/smoke-test.sh
 ```
 
-The current suite covers 57 cases, including:
+The current suite covers 61 cases, including:
 
 - explicit operation selection,
+- standalone clip operation selection,
 - option conflicts,
 - timestamp validation,
 - hour-boundary clipping validation,
+- rejection of standalone clipping for non-H.264/AAC input,
+- H.264/AAC stream-copy clip creation,
+- H.264/AAC codec preservation during stream-copy clipping,
 - removed options,
 - frame option dependencies,
 - force parsing,
@@ -733,4 +779,4 @@ Native Windows `ffprobe` may emit CRLF line endings. Automated codec and input-c
 
 ## Conclusion
 
-The priority is confidence that ClipCrank translates simple user-facing operations into correct `ffmpeg` behavior, produces predictable and playable output, preserves safe overwrite semantics, and handles timestamps, filenames, codecs, metadata, audio operations, and remuxing consistently across supported environments.
+The priority is confidence that ClipCrank translates simple user-facing operations into correct `ffmpeg` behavior, produces predictable and playable output, preserves safe overwrite semantics, and handles timestamps, filenames, codecs, metadata, clipping, audio operations, and remuxing consistently across supported environments.
