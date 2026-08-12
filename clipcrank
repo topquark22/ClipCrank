@@ -8,6 +8,7 @@ clear_metadata=false
 metadata_args=()
 positional_args=()
 force=false
+yes=false
 reencode=false
 add_audio=false
 extract_audio=false
@@ -54,6 +55,7 @@ Operations:
 
 Options:
   -f, --force              Overwrite existing output files
+  -y, --yes                Accept an adjusted stream-copy clip start without prompting
   --metadata KEY=VALUE     Set an MP4 metadata field; may be repeated
   --title TEXT             Set title metadata
   --artist TEXT            Set artist metadata
@@ -82,6 +84,7 @@ Examples:
   $progname --info input.mov
   $progname --show-metadata input.mov
   $progname --start 12.500 --end 2:05 input.mp4 clip.mp4
+  $progname -y --start 12.500 --end 2:05 input.mp4 clip.mp4
   $progname --reencode --start 12.500 --end 2:05 input.mov clip.mp4
   $progname --frame 1:23.500 input.mp4
   $progname --frame 10 --interval 5 --count 4 input.mp4
@@ -144,6 +147,29 @@ clip_can_stream_copy() {
     )
 
     return 0
+}
+
+find_stream_copy_start() {
+    input=$1
+    requested=$2
+
+    ffprobe \
+        -v error \
+        -select_streams v:0 \
+        -skip_frame nokey \
+        -show_frames \
+        -show_entries frame=best_effort_timestamp_time \
+        -of default=noprint_wrappers=1:nokey=1 \
+        "$input" 2>/dev/null |
+    tr -d '\r' |
+    awk -v requested="$requested" '
+        $0 != "" && $0 != "N/A" && ($0 + 0) <= requested {
+            found=$0
+        }
+        END {
+            if (found != "") printf "%.3f\n", found
+        }
+    '
 }
 
 format_duration() {
@@ -539,6 +565,10 @@ parse_args() {
                 ;;
             -f|--force)
                 force=true
+                shift
+                ;;
+            -y|--yes)
+                yes=true
                 shift
                 ;;
             --reencode)
@@ -1150,6 +1180,31 @@ if [ "$operation_count" -eq 0 ] && [ "$clip_requested" = true ]; then
     if ! clip_can_stream_copy "$input"; then
         error "input is not H.264/AAC; use --reencode with --start or --end"
         exit 2
+    fi
+
+    if [ -n "$clip_start_seconds" ]; then
+        stream_copy_start=$(find_stream_copy_start "$input" "$clip_start_seconds")
+        if [ -z "$stream_copy_start" ]; then
+            stream_copy_start=0.000
+        fi
+
+        difference=$(awk "BEGIN {printf \"%.3f\", $clip_start_seconds - $stream_copy_start}")
+        if awk "BEGIN {exit !($difference > 0.0005)}"; then
+            info "requested start: $clip_start_seconds"
+            info "stream-copy keyframe start: $stream_copy_start"
+            info "difference: $difference seconds"
+
+            if [ "$yes" = false ]; then
+                printf 'Continue without re-encoding? [Y/n] '
+                IFS= read -r answer || answer=
+                case "$answer" in
+                    n|N|no|NO|No)
+                        info "cancelled; use --reencode for an exact start time"
+                        exit 0
+                        ;;
+                esac
+            fi
+        fi
     fi
 
     output=${requested_output:-$(derive_video_output_path "$input")}
