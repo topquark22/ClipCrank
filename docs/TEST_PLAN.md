@@ -14,9 +14,9 @@ The test plan aims to confirm that `clipcrank`:
 
 - requires an explicit operation or clip boundary,
 - re-encodes supported input media into standardized H.264/AAC MP4 output,
-- stream-copies clips when input is already H.264/AAC,
-- requires `--reencode` for clipping input that is not H.264/AAC,
-- reports keyframe-adjusted stream-copy starts and allows confirmation or `-y` / `--yes` bypass,
+- re-encodes clips by default when `--start` or `--end` is used,
+- stream-copies clips only when `--copy-stream` is explicitly supplied,
+- reports the actual keyframe used for stream-copy clipping,
 - selects a working H.264 encoder from the local `ffmpeg` environment,
 - uses AAC audio when audio is present,
 - adds or replaces audio on video input,
@@ -86,7 +86,7 @@ ClipCrank currently exposes these primary operations:
 --frame TIME
 ```
 
-Only one operation may be selected at a time. `--start` or `--end` may also select standalone clip creation when the input is eligible for H.264/AAC stream copying.
+Only one operation may be selected at a time. `--start` or `--end` may also select clip creation directly; clipping re-encodes by default. `--copy-stream` is an explicit clipping option rather than a separate operation.
 
 Running `clipcrank` without an operation or clip boundary shall print Usage and exit non-zero.
 
@@ -361,12 +361,29 @@ In three-field form, minutes and seconds must be between 0 and 59. In two-field 
 
 ## Clip Tests
 
-### Standalone H.264/AAC stream-copy clip
+### Default clip re-encoding
 
-The generated H.264/AAC fixture can be clipped without `--reencode`:
+The VP9 Big Buck Bunny fixture shall be clipped successfully without specifying `--reencode`:
 
 ```sh
-./clipcrank --force -y --start 1 --end 3 tmp/bah.mp4 tmp/bah-clip.mp4
+./clipcrank --force --start 1 --end 3 \
+  examples/Big_Buck_Bunny_720_10s_1MB.webm \
+  tmp/Big_Buck_Bunny_clip.mp4
+```
+
+Expected:
+- output file exists,
+- the clip is re-encoded,
+- output video codec is H.264.
+
+The explicit `--reencode` form remains valid but is not required for clipping.
+
+### Explicit H.264/AAC stream-copy clip
+
+The generated H.264/AAC fixture can be clipped without re-encoding by specifying `--copy-stream`:
+
+```sh
+./clipcrank --force --copy-stream --start 1 --end 3 tmp/bah.mp4 tmp/bah-clip.mp4
 ```
 
 Expected:
@@ -374,52 +391,38 @@ Expected:
 - video codec remains H.264,
 - audio codec remains AAC,
 - no video or audio re-encoding is performed,
-- if the requested start is not itself a usable keyframe, the requested start, keyframe start, and difference are printed,
-- `-y` suppresses the confirmation prompt but does not suppress those informational messages.
+- the requested start and actual usable keyframe start are printed,
+- if those timestamps differ, the difference is also printed,
+- no confirmation prompt is displayed.
 
-The automated smoke suite verifies successful output creation, codec preservation, keyframe-adjustment reporting, and noninteractive `-y` behavior.
+The automated smoke suite verifies successful output creation, codec preservation, and keyframe reporting.
 
-### Keyframe-adjustment confirmation
+### Copy-stream validation
 
-Run a stream-copy clip with a requested start that does not coincide with a usable keyframe and omit `-y` / `--yes`.
-
-Expected output includes information equivalent to:
-
-```text
-clipcrank: requested start: 1.000
-clipcrank: stream-copy keyframe start: 0.000
-clipcrank: difference: 1.000 seconds
-Continue without re-encoding? [Y/n]
-```
-
-The exact keyframe timestamp depends on the source file. Answering `n` shall exit successfully without creating the requested output and shall advise using `--reencode` for an exact start time.
-
-The smoke suite also verifies that `--yes` parses correctly and that `-y` suppresses only the prompt, not the informational timestamp output.
-
-### Non-H.264/AAC input requires re-encoding
-
-The Big Buck Bunny fixture uses VP9 and therefore shall not be stream-copied into a standard ClipCrank MP4 clip:
+`--copy-stream` requires at least one clip boundary:
 
 ```sh
-./clipcrank --start 1 --end 3 \
-  examples/Big_Buck_Bunny_720_10s_1MB.webm \
-  tmp/Big_Buck_Bunny_clip.mp4
+./clipcrank --copy-stream input.mp4
 ```
 
-Expected: the command fails with guidance to use `--reencode`.
+Expected: clear error that `--copy-stream` requires `--start` or `--end`.
 
-The equivalent re-encoding invocation remains valid:
+It must not be combined with `--reencode` or another primary operation.
+
+The Big Buck Bunny fixture uses VP9 and therefore shall be rejected by `--copy-stream`:
 
 ```sh
-./clipcrank --reencode --start 1 --end 3 \
+./clipcrank --copy-stream --start 1 --end 3 \
   examples/Big_Buck_Bunny_720_10s_1MB.webm \
-  tmp/Big_Buck_Bunny_clip.mp4
+  tmp/Big_Buck_Bunny_copy_clip.mp4
 ```
+
+Expected: clear error that stream-copy clipping requires H.264 video and AAC audio when audio is present.
 
 ### Start and end with re-encoding
 
 ```sh
-./clipcrank --reencode --start 10.250 --end 20.750 input.mp4 clip.mp4
+./clipcrank --start 10.250 --end 20.750 input.mp4 clip.mp4
 ```
 
 Expected:
@@ -430,7 +433,7 @@ Expected:
 ### Start only
 
 ```sh
-./clipcrank --reencode --start 1:12.500 input.mp4 clip.mp4
+./clipcrank --start 1:12.500 input.mp4 clip.mp4
 ```
 
 Expected: starts at 1 minute 12.500 seconds and continues to EOF.
@@ -438,7 +441,7 @@ Expected: starts at 1 minute 12.500 seconds and continues to EOF.
 ### End only
 
 ```sh
-./clipcrank --reencode --end 2:05 input.mp4 clip.mp4
+./clipcrank --end 2:05 input.mp4 clip.mp4
 ```
 
 Expected: starts at the beginning and ends at 2 minutes 5 seconds.
@@ -446,12 +449,12 @@ Expected: starts at the beginning and ends at 2 minutes 5 seconds.
 ### Cross an hour boundary
 
 ```sh
-./clipcrank --reencode --start 59:59 --end 1:00:01 input.mp4 clip.mp4
+./clipcrank --start 59:59 --end 1:00:01 input.mp4 clip.mp4
 ```
 
-Expected: produces an approximately two-second clip crossing the one-hour boundary.
+Expected: produces an approximately two-second re-encoded clip crossing the one-hour boundary.
 
-Stream-copy clipping is constrained by existing keyframes, so its requested start time is not required to be frame-exact. Re-encoded clipping remains the appropriate path when frame-exact transcoded output is required.
+Stream-copy clipping is constrained by existing keyframes, so its requested start time is not required to be frame-exact. Default clipping remains the appropriate path when frame-exact transcoded output is required.
 
 ## Frame Capture Tests
 
@@ -663,7 +666,7 @@ Expected: Usage is printed and the command exits non-zero.
 ### End before start
 
 ```sh
-./clipcrank --reencode --start 1:00 --end 0:59 input.mp4 out.mp4
+./clipcrank --start 1:00 --end 0:59 input.mp4 out.mp4
 ```
 
 Expected: clear error that `--end` must be later than `--start`.
@@ -671,7 +674,7 @@ Expected: clear error that `--end` must be later than `--start`.
 ### Invalid timestamp
 
 ```sh
-./clipcrank --reencode --start 0:61:00 input.mp4 out.mp4
+./clipcrank --start 0:61:00 input.mp4 out.mp4
 ```
 
 Expected: timestamp-format error.
@@ -717,7 +720,7 @@ For standard re-encoded and `--add-audio` output, verify as applicable:
 - `yuv420p` pixel format,
 - even-numbered output dimensions.
 
-For stream-copy clips, verify H.264 video and AAC audio where audio is present. Codec names shall remain unchanged because no re-encoding occurs.
+For `--copy-stream` clips, verify H.264 video and AAC audio where audio is present. Codec names shall remain unchanged because no re-encoding occurs.
 
 For `--extract-audio`, verify that the output contains an MP3 audio stream and no video stream.
 
@@ -727,7 +730,7 @@ For `--remux`, verify the requested target container and confirm that the video 
 
 For re-encoded clips with both boundaries, compare duration with `end - start`. For end-only clips, compare duration with `end`. For start-only clips, confirm that output continues through the source's end.
 
-Small differences at frame or audio-sample boundaries are acceptable. Stream-copy clip starts may differ more because they are constrained by existing keyframes.
+Small differences at frame or audio-sample boundaries are acceptable. `--copy-stream` clip starts may differ more because they are constrained by existing keyframes.
 
 ## Cleanup Verification
 
@@ -752,16 +755,17 @@ The current suite covers 65 cases, including:
 
 - explicit operation selection,
 - standalone clip operation selection,
-- `--yes` parsing,
+- default clip re-encoding,
+- H.264 verification of default clip output,
+- `--copy-stream` boundary validation,
+- `--copy-stream` operation-conflict validation,
+- rejection of `--copy-stream` for non-H.264/AAC input,
+- H.264/AAC stream-copy clip creation,
+- reporting of requested and actual stream-copy keyframe starts,
+- H.264/AAC codec preservation during stream-copy clipping,
 - option conflicts,
 - timestamp validation,
 - hour-boundary clipping validation,
-- rejection of standalone clipping for non-H.264/AAC input,
-- H.264/AAC stream-copy clip creation,
-- reporting of requested and keyframe-adjusted stream-copy starts,
-- `-y` suppression of the confirmation prompt,
-- cancellation without output when the user declines the adjusted stream-copy start,
-- H.264/AAC codec preservation during stream-copy clipping,
 - removed options,
 - frame option dependencies,
 - force parsing,
