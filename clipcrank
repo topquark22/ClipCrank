@@ -12,6 +12,7 @@ reencode=false
 add_audio=false
 extract_audio=false
 remove_audio=false
+remux=false
 show_info=false
 
 fps=
@@ -46,6 +47,7 @@ Operations:
   --add-audio               Add or replace audio: VIDEO|IMAGE AUDIO [OUTPUT]
   --extract-audio           Extract audio as MP3
   --remove-audio            Remove audio: INPUT OUTPUT
+  --remux                   Change container without re-encoding: INPUT OUTPUT
   --info                    Display technical media information and exit
   --show-metadata           Display input metadata and exit
   --frame TIME              Capture JPEG frame(s) starting at [[h:]m:]s[.ms]
@@ -76,6 +78,7 @@ Examples:
   $progname --add-audio image.jpg soundtrack.wav output.mp4
   $progname --extract-audio input.mp4 output.mp3
   $progname --remove-audio input.mp4 silent.mp4
+  $progname --remux input.mkv output.mp4
   $progname --info input.mov
   $progname --show-metadata input.mov
   $progname --reencode --start 12.500 --end 2:05 input.mov clip.mp4
@@ -528,6 +531,10 @@ parse_args() {
                 remove_audio=true
                 shift
                 ;;
+            --remux)
+                remux=true
+                shift
+                ;;
             --info)
                 show_info=true
                 shift
@@ -898,6 +905,20 @@ EOF
         "$tmp_output"
 }
 
+run_remux() {
+    input=$1
+    tmp_output=$2
+
+    ffmpeg \
+        -hide_banner \
+        -loglevel error \
+        -y \
+        -i "$input" \
+        -map 0 \
+        -c copy \
+        "$tmp_output"
+}
+
 multi_frame_output_base() {
     input=$1
     requested=${2:-}
@@ -923,6 +944,7 @@ operation_count=0
 [ "$add_audio" = false ] || operation_count=$((operation_count + 1))
 [ "$extract_audio" = false ] || operation_count=$((operation_count + 1))
 [ "$remove_audio" = false ] || operation_count=$((operation_count + 1))
+[ "$remux" = false ] || operation_count=$((operation_count + 1))
 [ "$show_info" = false ] || operation_count=$((operation_count + 1))
 [ "$show_metadata" = false ] || operation_count=$((operation_count + 1))
 [ -z "$frame_time" ] || operation_count=$((operation_count + 1))
@@ -942,7 +964,7 @@ if [ "$add_audio" = true ]; then
         usage >&2
         exit 2
     fi
-elif [ "$remove_audio" = true ]; then
+elif [ "$remove_audio" = true ] || [ "$remux" = true ]; then
     if [ "${#positional_args[@]}" -ne 2 ]; then
         usage >&2
         exit 2
@@ -1054,6 +1076,53 @@ fi
 if [ ! -r "$input" ]; then
     error "input file is not readable: $input"
     exit 1
+fi
+
+if [ "$remux" = true ]; then
+    if [ -n "$clip_start" ] || [ -n "$clip_end" ] || [ -n "$fps" ] || [ "$cfr" = true ] || [ "$preserve_metadata" = true ] || [ "$clear_metadata" = true ] || [ "${#metadata_args[@]}" -gt 0 ]; then
+        error "--remux cannot be combined with video or metadata options"
+        exit 2
+    fi
+
+    output=$requested_output
+
+    case "$output" in
+        *.*) ;;
+        *)
+            error "remux output must include a file extension"
+            exit 2
+            ;;
+    esac
+
+    if [ "$input" = "$output" ]; then
+        error "input and output paths must be different"
+        exit 1
+    fi
+
+    if [ "$force" = false ] && [ -e "$output" ]; then
+        error "output file already exists: $output"
+        exit 1
+    fi
+
+    tmp_output="${output%.*}.part.${output##*.}"
+
+    info "remuxing without re-encoding"
+
+    cleanup() {
+        [ ! -e "$tmp_output" ] || rm -f "$tmp_output"
+    }
+
+    trap cleanup EXIT INT TERM HUP
+
+    if ! run_remux "$input" "$tmp_output"; then
+        error "remux failed"
+        exit 1
+    fi
+
+    mv -f -- "$tmp_output" "$output"
+    trap - EXIT INT TERM HUP
+    printf 'created: %s\n' "$output"
+    exit 0
 fi
 
 if [ "$extract_audio" = true ]; then
