@@ -1,8 +1,8 @@
 # ClipCrank
 
-`clipcrank` can convert (re-encode) many kinds of video files into standardized MP4 output using `ffmpeg`. It can also create clips based on starting and/or ending timestamps, capture one or more JPEG still frames from a video, add or replace audio using either a video or still image as the visual source, extract audio to MP3, and remove audio from video.
+`clipcrank` can convert (re-encode) many kinds of video files into standardized MP4 output using `ffmpeg`. It can also create clips based on starting and/or ending timestamps, capture one or more JPEG still frames from a video, add or replace audio using either a video or still image as the visual source, extract audio to MP3, remove audio from video, and change media containers without re-encoding.
 
-`clipcrank` is a wrapper for `ffmpeg`, intended to simplify common `ffmpeg` operations and provide a more intuitive command-line interface. It does not replace `ffmpeg`; instead, it handles the underlying invocation and options for common video conversion, clipping, frame-capture, metadata, and audio tasks.
+`clipcrank` is a wrapper for `ffmpeg`, intended to simplify common `ffmpeg` operations and provide a more intuitive command-line interface. It does not replace `ffmpeg`; instead, it handles the underlying invocation and options for common video conversion, clipping, frame-capture, metadata, audio, and remuxing tasks.
 
 ## Features
 
@@ -13,6 +13,7 @@
 - Creates H.264/AAC MP4 video from a still image plus audio
 - Extracts audio from video to MP3
 - Removes audio from video
+- Remuxes media to a different container without re-encoding
 - Displays technical media information
 - JPEG quality defaults to 90 and is configurable
 - Refuses to overwrite existing output by default
@@ -87,6 +88,7 @@ The available operations currently are:
 - `--add-audio` — add or replace audio using a video or still image as input
 - `--extract-audio` — extract the first audio stream as MP3
 - `--remove-audio` — remove the audio stream and create H.264 MP4 output
+- `--remux` — change the media container without re-encoding streams
 - `--info` — display technical media information and exit
 - `--show-metadata` — display metadata and exit
 - `--frame TIME` — capture one or more JPEG frames
@@ -142,6 +144,19 @@ Use `--remove-audio` to create an H.264 MP4 containing the video stream without 
 
 The output filename is mandatory. No default output filename is generated.
 
+### Remuxing
+
+Use `--remux` to change the media container without re-encoding the streams:
+
+```sh
+./clipcrank --remux input.mp4 output.mkv
+./clipcrank --remux input.mkv output.mp4
+```
+
+Both input and output filenames are mandatory. The output filename extension selects the target container. ClipCrank uses FFmpeg stream copying, so the existing video, audio, subtitle, and other streams are copied rather than transcoded.
+
+`--remux` does not fall back to re-encoding. If the target container cannot accept one or more streams from the input file, the operation fails without creating the final output file.
+
 ### Overwriting existing files
 
 By default, `clipcrank` refuses to overwrite an existing output file. Use `-f` or `--force` to allow replacement:
@@ -152,7 +167,7 @@ By default, `clipcrank` refuses to overwrite an existing output file. Use `-f` o
 ./clipcrank -f --frame 10 --interval 5 --count 4 input.mp4
 ```
 
-This applies to recoding, audio operations, single-frame capture, and every output in multi-frame capture. Temporary files are still used, so the existing final output is replaced only after the new output has been successfully created.
+This applies to recoding, audio operations, remuxing, single-frame capture, and every output in multi-frame capture. Temporary files are still used, so the existing final output is replaced only after the new output has been successfully created.
 
 ## Media Information
 
@@ -247,7 +262,7 @@ Use `--reencode` with `--fps N` to convert output video to an explicit frame rat
 
 ## Frame-capture option compatibility
 
-`--frame` cannot be combined with `--reencode`, `--add-audio`, `--extract-audio`, `--remove-audio`, `--show-metadata`, `--start`, `--end`, `--fps`, `--cfr`, or MP4 metadata options.
+`--frame` cannot be combined with `--reencode`, `--add-audio`, `--extract-audio`, `--remove-audio`, `--remux`, `--show-metadata`, `--start`, `--end`, `--fps`, `--cfr`, or MP4 metadata options.
 
 ## Testing
 
