@@ -7,7 +7,7 @@
 ## Features
 
 - Converts video to H.264/AAC MP4
-- Creates clips using optional start/end times, re-encoding by default or copying H.264/AAC streams explicitly with `--copy-stream`
+- Creates clips using optional start/end times, re-encoding to H.264/AAC by default
 - Captures single or multiple JPEG frames
 - Adds or replaces audio on video input
 - Creates H.264/AAC MP4 video from a still image plus audio
