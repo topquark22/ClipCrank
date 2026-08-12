@@ -10,7 +10,7 @@ The script is intended to be:
 - portable across environments where the required FFmpeg tools are available,
 - and robust enough to handle old or awkward media formats when `ffmpeg` can decode them.
 
-The current implementation supports H.264/AAC MP4 re-encoding, video clipping, JPEG frame capture, metadata inspection and editing, frame-rate control, audio addition or replacement, still-image plus audio video creation, MP3 audio extraction, audio removal, and safe overwrite handling.
+The current implementation supports H.264/AAC MP4 re-encoding, video clipping, JPEG frame capture, metadata inspection and editing, frame-rate control, audio addition or replacement, still-image plus audio video creation, MP3 audio extraction, audio removal, container remuxing, and safe overwrite handling.
 
 Operations must be selected explicitly. Running the script with an input file but no operation shall print usage information rather than implicitly re-encoding the file.
 
@@ -24,6 +24,7 @@ The script shall support the following operations:
 - `--add-audio` to add or replace audio using video or still-image visual input,
 - `--extract-audio` to extract the first audio stream as MP3,
 - `--remove-audio` to create H.264 MP4 output without an audio stream,
+- `--remux` to change the media container without re-encoding streams,
 - `--show-metadata` to display stored input metadata tags and exit,
 - `--frame TIME` to capture one or more JPEG still frames.
 
@@ -40,7 +41,7 @@ The script shall:
 - accept one required input path argument,
 - accept one optional output path argument when the selected operation permits output,
 - accept a separate required audio input path for `--add-audio`,
-- require an explicit output path for `--remove-audio`,
+- require an explicit output path for `--remove-audio` and `--remux`,
 - derive an output path when no explicit output path is provided and the selected operation permits default naming,
 - reject execution when the wrong number of arguments is provided,
 - reject execution when an input file does not exist,
@@ -51,6 +52,8 @@ The script shall:
 For `--add-audio`, the visual input shall be classified using `ffprobe` rather than by filename extension. A single-frame visual input shall be treated as a still image; visual input containing multiple frames shall be treated as video. Input that cannot be classified as either a supported still image or video shall be rejected.
 
 For `--remove-audio`, both the input path and output path shall be required. The operation shall not derive a default output filename.
+
+For `--remux`, both the input path and output path shall be required. The output path shall include a filename extension so that FFmpeg can determine the requested target container.
 
 The planned `--info` operation shall accept exactly one input file and no output path.
 
@@ -71,6 +74,8 @@ Explicit `--extract-audio` output paths shall use the `.mp3` extension.
 
 For `--remove-audio`, an explicit `.mp4` output path shall be mandatory. No default output path shall be generated.
 
+For `--remux`, an explicit output path with a filename extension shall be mandatory. The extension shall determine the requested target container. No default output path shall be generated.
+
 For single-frame capture, when no explicit output path is given, the script shall append a normalized timestamp to the input base name and use a `.jpg` extension.
 
 Frame timestamps used in filenames shall:
@@ -83,7 +88,7 @@ Frame timestamps used in filenames shall:
 
 The script shall write media output to a temporary output path before moving the completed file into place.
 
-Temporary video output shall preserve a `.mp4` suffix so that `ffmpeg` can infer or accept the MP4 container correctly. Temporary extracted-audio output shall preserve a `.mp3` suffix.
+Temporary video output shall preserve a `.mp4` suffix so that `ffmpeg` can infer or accept the MP4 container correctly. Temporary extracted-audio output shall preserve a `.mp3` suffix. Temporary remux output shall preserve the requested target filename extension.
 
 ### 4. Overwrite Behavior
 
@@ -296,7 +301,7 @@ The script shall support the following metadata controls for re-encoded MP4 outp
 
 `--preserve-metadata` and `--clear-metadata` shall not be accepted together.
 
-Metadata options shall not be accepted with frame capture, `--extract-audio`, or `--remove-audio`.
+Metadata options shall not be accepted with frame capture, `--extract-audio`, `--remove-audio`, or `--remux`.
 
 ### 15. Media Information
 
@@ -352,7 +357,29 @@ The script shall:
 - exit non-zero on failure,
 - exit zero on success.
 
-### 18. Cleanup Behavior
+### 18. Remux
+
+The script shall support:
+
+```text
+--remux INPUT OUTPUT
+```
+
+Both input and output paths shall be mandatory.
+
+The operation shall copy all input streams with FFmpeg stream copying rather than re-encoding them.
+
+The operation shall use the output filename extension to select the target container.
+
+The operation shall not silently fall back to transcoding. If the target container cannot accept one or more input streams, the remux operation shall fail without creating the final output file.
+
+`--remux` shall not select or require H.264, AAC, or MP3 encoders.
+
+`--remux` shall not accept clipping, frame-rate, or metadata-editing options.
+
+The operation shall preserve normal overwrite protection and temporary-output cleanup behavior.
+
+### 19. Cleanup Behavior
 
 The script shall remove partial temporary output files when an operation fails or is interrupted.
 
@@ -437,6 +464,11 @@ At minimum, testing should cover:
 - mandatory output handling for `--remove-audio`,
 - H.264 verification of `--remove-audio` output,
 - verification that `--remove-audio` output contains no audio stream,
+- mandatory output handling for `--remux`,
+- rejection of incompatible video or metadata options with `--remux`,
+- successful remuxing to a different container,
+- verification of the requested remux container with `ffprobe`,
+- verification that remuxing preserves the input video and audio codecs,
 - missing input handling,
 - invalid input path handling,
 - output-already-exists handling,
