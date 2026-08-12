@@ -21,6 +21,7 @@ The test plan aims to confirm that `clipcrank`:
 - detects still-image input from media content rather than filename extension,
 - extracts the first audio stream to MP3,
 - removes audio while retaining H.264 video,
+- remuxes media to a different container without re-encoding streams,
 - creates clips using a start time, end time, or both,
 - accepts timestamps in `[[h:]m:]s[.ms]` form,
 - captures single JPEG frames,
@@ -66,7 +67,7 @@ The smoke test should normally be run from the repository root:
 ./test/smoke-test.sh
 ```
 
-The current smoke suite contains 52 tests.
+The current smoke suite contains 57 tests.
 
 ## Operations
 
@@ -77,6 +78,7 @@ ClipCrank currently exposes these primary operations:
 --add-audio
 --extract-audio
 --remove-audio
+--remux
 --show-metadata
 --frame TIME
 ```
@@ -269,6 +271,67 @@ Expected:
 - the output filename is mandatory.
 
 Running `--remove-audio` without an output argument shall print Usage and exit non-zero.
+
+## Remux Tests
+
+The smoke suite uses the generated H.264/AAC video:
+
+```text
+tmp/bah.mp4
+```
+
+Remux it from MP4 to Matroska:
+
+```sh
+./clipcrank --force --remux tmp/bah.mp4 tmp/bah-remux.mkv
+```
+
+Expected:
+- the output file exists,
+- the output container is Matroska,
+- the video codec remains H.264,
+- the audio codec remains AAC,
+- no video or audio re-encoding is performed.
+
+Verify the container:
+
+```sh
+ffprobe -v error \
+  -show_entries format=format_name \
+  -of default=noprint_wrappers=1:nokey=1 \
+  tmp/bah-remux.mkv
+```
+
+Expected output contains:
+
+```text
+matroska
+```
+
+Verify the preserved codecs:
+
+```sh
+ffprobe -v error \
+  -select_streams v:0 \
+  -show_entries stream=codec_name \
+  -of default=noprint_wrappers=1:nokey=1 \
+  tmp/bah-remux.mkv
+
+ffprobe -v error \
+  -select_streams a:0 \
+  -show_entries stream=codec_name \
+  -of default=noprint_wrappers=1:nokey=1 \
+  tmp/bah-remux.mkv
+```
+
+Expected codecs:
+
+```text
+h264
+aac
+```
+
+Running `--remux` without an output argument shall print Usage and exit non-zero. `--remux` shall reject frame-rate, clipping, and metadata-editing options.
 
 ## Clip Timestamp Formats
 
@@ -499,7 +562,7 @@ Expected: failure without modifying the existing file.
 
 Expected: successful replacement after the new output has been created successfully.
 
-The same behavior applies to audio operations, single-frame output, and multiple-frame output.
+The same behavior applies to audio operations, remuxing, single-frame output, and multiple-frame output.
 
 Input and output paths that refer to the same file shall be rejected even when `--force` is supplied.
 
@@ -525,6 +588,14 @@ Expected: clear error that only one operation may be specified.
 
 ```sh
 ./clipcrank --remove-audio input.mp4
+```
+
+Expected: Usage is printed and the command exits non-zero.
+
+### Missing remux output
+
+```sh
+./clipcrank --remux input.mp4
 ```
 
 Expected: Usage is printed and the command exits non-zero.
@@ -590,13 +661,15 @@ For `--extract-audio`, verify that the output contains an MP3 audio stream and n
 
 For `--remove-audio`, verify that the output contains H.264 video and no audio stream.
 
+For `--remux`, verify the requested target container and confirm that the video and audio codec names are unchanged from the source.
+
 For clips with both boundaries, compare duration with `end - start`. For end-only clips, compare duration with `end`. For start-only clips, confirm that output continues through the source's end.
 
 Small differences at frame or audio-sample boundaries are acceptable.
 
 ## Cleanup Verification
 
-Conversion, audio, and frame-capture operations use temporary output files.
+Conversion, audio, remux, and frame-capture operations use temporary output files.
 
 Tests shall confirm that:
 
@@ -613,7 +686,7 @@ After every meaningful script change, run:
 ./test/smoke-test.sh
 ```
 
-The current suite covers 52 cases, including:
+The current suite covers 57 cases, including:
 
 - explicit operation selection,
 - option conflicts,
@@ -636,6 +709,11 @@ The current suite covers 52 cases, including:
 - H.264/AAC verification for audio-addition operations,
 - default audio-derived basename checking,
 - still-image detection independent of filename extension,
+- remux mandatory-output validation,
+- remux option-conflict validation,
+- MP4-to-Matroska remuxing,
+- remux container verification,
+- H.264/AAC codec preservation during remuxing,
 - MP3 audio extraction,
 - MP3 codec verification,
 - mandatory `--remove-audio` output validation,
@@ -655,4 +733,4 @@ Native Windows `ffprobe` may emit CRLF line endings. Automated codec and input-c
 
 ## Conclusion
 
-The priority is confidence that ClipCrank translates simple user-facing operations into correct `ffmpeg` behavior, produces predictable and playable output, preserves safe overwrite semantics, and handles timestamps, filenames, codecs, metadata, and audio operations consistently across supported environments.
+The priority is confidence that ClipCrank translates simple user-facing operations into correct `ffmpeg` behavior, produces predictable and playable output, preserves safe overwrite semantics, and handles timestamps, filenames, codecs, metadata, audio operations, and remuxing consistently across supported environments.
