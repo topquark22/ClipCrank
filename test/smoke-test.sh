@@ -26,6 +26,7 @@ run_expect_failure_message "invalid start timestamp should fail" "start must be 
 run_expect_failure_message "clip end must be later than start" "--end must be later than --start" "$target_script" --reencode --start 60 --end 59.999 "$tmp_dir/missing.flv"
 run_expect_failure_message "clip across hour boundary should pass validation" "input file not found" "$target_script" --reencode --start 59:59 --end 1:00:01 "$tmp_dir/missing.flv"
 run_expect_failure_message "standalone clip should count as an operation" "input file not found" "$target_script" --start 1 "$tmp_dir/missing.mp4" "$tmp_dir/clip.mp4"
+run_expect_failure_message "long yes flag should parse" "input file not found" "$target_script" --yes --start 1 "$tmp_dir/missing.mp4" "$tmp_dir/clip.mp4"
 run_expect_failure_message "removed trim-seconds option should fail" "unknown option: --trim-seconds" "$target_script" --trim-seconds 0.04 "$tmp_dir/missing.flv"
 run_expect_failure_message "remove audio requires output file" "Usage:" "$target_script" --remove-audio "$tmp_dir/missing.mp4"
 run_expect_failure_message "remux requires output file" "Usage:" "$target_script" --remux "$tmp_dir/missing.mp4"
@@ -160,10 +161,20 @@ fi
 
 stream_copy_clip="tmp/bah-clip.mp4"
 
-if "$target_script" --force --start 1 --end 3 "$created_video" "$stream_copy_clip" >/dev/null 2>&1 && [ -f "$stream_copy_clip" ]; then
+if output=$("$target_script" --force -y --start 1 --end 3 "$created_video" "$stream_copy_clip" 2>&1) && [ -f "$stream_copy_clip" ]; then
     pass "H.264/AAC clip should be created without --reencode"
 else
     fail "H.264/AAC clip should be created without --reencode"
+fi
+if case "$output" in *"requested start: 1.000"*"stream-copy keyframe start:"*"difference:"*) true ;; *) false ;; esac; then
+    pass "stream-copy clip should report adjusted keyframe start"
+else
+    fail "stream-copy clip should report adjusted keyframe start"
+fi
+if case "$output" in *"Continue without re-encoding?"*) false ;; *) true ;; esac; then
+    pass "-y should suppress stream-copy confirmation prompt"
+else
+    fail "-y should suppress stream-copy confirmation prompt"
 fi
 if [ -f "$stream_copy_clip" ] &&
    [ "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$stream_copy_clip" | tr -d '\r')" = "h264" ] &&
@@ -171,6 +182,16 @@ if [ -f "$stream_copy_clip" ] &&
     pass "stream-copy clip should preserve H.264 and AAC codecs"
 else
     fail "stream-copy clip should preserve H.264 and AAC codecs"
+fi
+
+declined_clip="tmp/bah-declined.mp4"
+rm -f "$declined_clip"
+if output=$(printf 'n\n' | "$target_script" --force --start 1 --end 3 "$created_video" "$declined_clip" 2>&1) &&
+   [ ! -e "$declined_clip" ] &&
+   case "$output" in *"Continue without re-encoding?"*"cancelled; use --reencode for an exact start time"*) true ;; *) false ;; esac; then
+    pass "declining adjusted stream-copy clip should create no output"
+else
+    fail "declining adjusted stream-copy clip should create no output"
 fi
 
 remuxed_video="tmp/bah-remux.mkv"
