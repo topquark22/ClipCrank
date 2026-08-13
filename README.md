@@ -8,7 +8,7 @@
 
 ## Features
 
-- Converts video to H.264/AAC MP4
+- Converts (re-encodes) video to H.264/AAC MP4
 - Creates clips using optional start/end times, re-encoding to H.264/AAC by default
 - Captures single or multiple JPEG frames
 - Adds or replaces audio on video input
