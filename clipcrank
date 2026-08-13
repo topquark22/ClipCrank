@@ -483,6 +483,34 @@ validate_clip() {
     fi
 }
 
+validate_clip_bounds() {
+    input=$1
+
+    if ! have_command ffprobe; then
+        error "ffprobe is not installed or not on PATH"
+        exit 127
+    fi
+
+    input_duration=$(probe_value "$input" format=duration)
+    if [ -z "$input_duration" ] || [ "$input_duration" = "N/A" ]; then
+        error "could not determine input duration"
+        exit 1
+    fi
+
+    if [ -n "$clip_start_seconds" ] && awk "BEGIN {exit !($clip_start_seconds >= $input_duration)}"; then
+        error "--start $clip_start_seconds is at or beyond the input duration of $(awk "BEGIN {printf \"%.3f\", $input_duration}") seconds"
+        exit 2
+    fi
+
+    if [ -n "$clip_end" ]; then
+        clip_end_seconds=$(timestamp_to_seconds "$clip_end")
+        if awk "BEGIN {exit !($clip_end_seconds > $input_duration)}"; then
+            error "--end $clip_end_seconds is beyond the input duration of $(awk "BEGIN {printf \"%.3f\", $input_duration}") seconds"
+            exit 2
+        fi
+    fi
+}
+
 validate_frame_modes() {
     if [ -z "$frame_time" ]; then
         if [ -n "$frame_interval" ]; then
@@ -1179,6 +1207,10 @@ fi
 if [ ! -r "$input" ]; then
     error "input file is not readable: $input"
     exit 1
+fi
+
+if [ "$clip_requested" = true ]; then
+    validate_clip_bounds "$input"
 fi
 
 if [ "$copy_stream" = true ]; then
