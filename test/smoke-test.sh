@@ -109,6 +109,8 @@ if output=$("$target_script" --info "$sample_video" 2>&1) &&
 else
     fail "info should summarize video without audio"
 fi
+run_expect_failure_message "clip start beyond input duration should fail" "--start 20.000 is at or beyond the input duration" "$target_script" --start 20 "$sample_video" "tmp/Big_Buck_Bunny_bad_start.mp4"
+run_expect_failure_message "clip end beyond input duration should fail" "--end 20.000 is beyond the input duration" "$target_script" --end 20 "$sample_video" "tmp/Big_Buck_Bunny_bad_end.mp4"
 run_expect_failure_message "copy stream should reject non-H.264 input" "--copy-stream requires H.264 video with AAC audio, if audio is present" "$target_script" --copy-stream --start 1 --end 3 "$sample_video" "tmp/Big_Buck_Bunny_copy_clip.mp4"
 default_clip="tmp/Big_Buck_Bunny_clip.mp4"
 if "$target_script" --force --start 1 --end 3 "$sample_video" "$default_clip" >/dev/null 2>&1 && [ -f "$default_clip" ]; then
