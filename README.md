@@ -17,9 +17,6 @@
 - Removes audio from video
 - Remuxes media to a different container without re-encoding
 - Displays technical media information
-- JPEG quality defaults to 90 and is configurable
-- Refuses to overwrite existing output by default
-- Supports `-f` / `--force` to overwrite existing output
 - Cleans up partial output on failure or interruption
 
 ## Requirements
