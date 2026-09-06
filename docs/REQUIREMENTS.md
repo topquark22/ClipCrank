@@ -435,7 +435,7 @@ When `--image IMAGE` is supplied, the script shall use the supplied still image 
 
 Within `--add-thumbnail`, `--frame` shall act as a modifier of the thumbnail operation rather than as the standalone JPEG frame-capture operation.
 
-`--frame` and `--image` shall not be accepted together with `--add-thumbnail`.
+`--frame` and `--image` shall not be accepted together.
 
 Thumbnail frame timestamps shall use the existing `[[h:]m:]s[.ms]` syntax and shall be validated against the input duration. A timestamp at or beyond the end of the video shall be rejected.
 
