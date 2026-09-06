@@ -25,6 +25,7 @@ The script shall support the following operations:
 - `--extract-audio` to extract the first audio stream as MP3,
 - `--remove-audio` to create H.264 MP4 output without an audio stream,
 - `--remux` to change the media container without re-encoding streams,
+- `--add-thumbnail` to add an attached thumbnail to MP4 video output,
 - `--show-metadata` to display stored input metadata tags and exit,
 - `--frame TIME` to capture one or more JPEG still frames.
 
@@ -45,7 +46,7 @@ The script shall:
 - accept one required input path argument,
 - accept one optional output path argument when the selected operation permits output,
 - accept a separate required audio input path for `--add-audio`,
-- require an explicit output path for `--remove-audio` and `--remux`,
+- require an explicit output path for `--remove-audio`, `--remux`, and `--add-thumbnail`,
 - derive an output path when no explicit output path is provided and the selected operation permits default naming,
 - reject execution when the wrong number of arguments is provided,
 - reject execution when an input file does not exist,
@@ -58,6 +59,8 @@ For `--add-audio`, the visual input shall be classified using `ffprobe` rather t
 For `--remove-audio`, both the input path and output path shall be required. The operation shall not derive a default output filename.
 
 For `--remux`, both the input path and output path shall be required. The output path shall include a filename extension so that FFmpeg can determine the requested target container.
+
+For `--add-thumbnail`, both the input path and output path shall be required. When `--image IMAGE` is supplied, the image path shall refer to a readable regular file that the installed FFmpeg build can decode as a still image.
 
 The planned `--info` operation shall accept exactly one input file and no output path.
 
@@ -81,6 +84,8 @@ Explicit `--extract-audio` output paths shall use the `.mp3` extension.
 For `--remove-audio`, an explicit `.mp4` output path shall be mandatory. No default output path shall be generated.
 
 For `--remux`, an explicit output path with a filename extension shall be mandatory. The extension shall determine the requested target container. No default output path shall be generated.
+
+For `--add-thumbnail`, an explicit `.mp4` output path shall be mandatory. No default output path shall be generated.
 
 For single-frame capture, when no explicit output path is given, the script shall append a normalized timestamp to the input base name and use a `.jpg` extension.
 
@@ -369,7 +374,7 @@ Sections that do not apply to the input shall be omitted or clearly reported as 
 
 The script shall require `ffmpeg` to be installed and available on `PATH` for media-writing operations.
 
-The script shall require `ffprobe` to be installed and available on `PATH` for metadata inspection, planned `--info` media inspection, `--add-audio` visual-input classification, `--copy-stream` codec validation, and stream-copy keyframe inspection.
+The script shall require `ffprobe` to be installed and available on `PATH` for metadata inspection, planned `--info` media inspection, `--add-audio` visual-input classification, `--copy-stream` codec validation, stream-copy keyframe inspection, and `--add-thumbnail` thumbnail detection and frame selection.
 
 The script shall fail clearly when a required executable is unavailable.
 
@@ -408,7 +413,55 @@ The operation shall not silently fall back to transcoding. If the target contain
 
 The operation shall preserve normal overwrite protection and temporary-output cleanup behavior.
 
-### 19. Cleanup Behavior
+### 19. Add Thumbnail
+
+The script shall support:
+
+```text
+--add-thumbnail INPUT OUTPUT
+--add-thumbnail --frame TIMESTAMP INPUT OUTPUT
+--add-thumbnail --image IMAGE INPUT OUTPUT
+```
+
+`--add-thumbnail INPUT OUTPUT` shall be equivalent to:
+
+```text
+--add-thumbnail --frame 0 INPUT OUTPUT
+```
+
+When `--frame TIMESTAMP` is supplied with `--add-thumbnail`, the script shall capture a still frame from the input video at the requested timestamp and embed it as an attached thumbnail.
+
+When `--image IMAGE` is supplied, the script shall use the supplied still image as the attached thumbnail instead of extracting a frame from the video.
+
+Within `--add-thumbnail`, `--frame` shall act as a modifier of the thumbnail operation rather than as the standalone JPEG frame-capture operation.
+
+`--frame` and `--image` shall not be accepted together with `--add-thumbnail`.
+
+Thumbnail frame timestamps shall use the existing `[[h:]m:]s[.ms]` syntax and shall be validated against the input duration. A timestamp at or beyond the end of the video shall be rejected.
+
+The operation shall use FFmpeg attached-picture or cover-art semantics.
+
+The ordinary input video and audio streams shall be copied without re-encoding.
+
+A thumbnail extracted using `--frame` shall retain the video's frame dimensions and aspect ratio.
+
+A user-supplied thumbnail shall retain its original dimensions and aspect ratio where supported. The script shall not automatically crop or resize it.
+
+The thumbnail image itself may be converted or re-encoded when required for MP4 container compatibility. Such conversion shall not re-encode the ordinary video or audio streams.
+
+If the input already contains an attached thumbnail, `--add-thumbnail` shall fail unless `--replace` is supplied.
+
+`--replace` shall be accepted only with `--add-thumbnail`.
+
+With `--replace`, an existing attached thumbnail shall be removed and replaced by the new thumbnail.
+
+If `--replace` is supplied and the input does not already contain a thumbnail, the operation shall add the new thumbnail normally rather than fail.
+
+`--replace` shall be distinct from `--force`: `--replace` permits replacement of an embedded thumbnail, while `--force` permits replacement of an existing output file.
+
+Whether a media player, file manager, or operating system displays an embedded attached picture as the video's thumbnail is outside the script's control.
+
+### 20. Cleanup Behavior
 
 The script shall remove partial temporary output files when an operation fails or is interrupted.
 
@@ -518,6 +571,19 @@ At minimum, testing should cover:
 - metadata inspection,
 - planned `--info` technical media inspection,
 - encoder-detection behavior,
+- default `--add-thumbnail` extraction from frame 0,
+- `--add-thumbnail` extraction from an explicit frame timestamp,
+- rejection of an `--add-thumbnail` frame timestamp at or beyond the input duration,
+- successful `--add-thumbnail --image` using a supplied still image,
+- preservation of a supplied thumbnail's dimensions and aspect ratio where supported,
+- rejection of `--add-thumbnail` when a thumbnail already exists without `--replace`,
+- replacement of an existing thumbnail with `--replace`,
+- successful `--replace` when the input has no existing thumbnail,
+- rejection of `--replace` outside `--add-thumbnail`,
+- rejection of `--frame` and `--image` together with `--add-thumbnail`,
+- mandatory output handling for `--add-thumbnail`,
+- verification with `ffprobe` that thumbnail output contains an attached-picture stream,
+- verification that `--add-thumbnail` preserves the ordinary video and audio codecs,
 - cleanup of temporary output artifacts on failure.
 
 The real-media codec tests shall tolerate CRLF line endings from native Windows `ffprobe` when run under Cygwin.
