@@ -313,6 +313,17 @@ else
     fail "remove audio output should contain no audio stream"
 fi
 
+
+silent_extract_output="tmp/bah-silent.mp3"
+rm -f "$silent_extract_output"
+if output=$("$target_script" --extract-audio "$silent_video" "$silent_extract_output" 2>&1) &&
+   [ ! -e "$silent_extract_output" ] &&
+   case "$output" in *"no audio stream found; no output created"*) true ;; *) false ;; esac; then
+    pass "extract audio should no-op successfully when input has no audio stream"
+else
+    fail "extract audio should no-op successfully when input has no audio stream"
+fi
+
 format_agnostic_image="tmp/lenna.still"
 format_agnostic_video="tmp/lenna_still_bah.mp4"
 cp -f "$sample_image" "$format_agnostic_image"

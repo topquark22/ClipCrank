@@ -138,6 +138,12 @@ probe_value() {
     head -n 1
 }
 
+has_audio_stream() {
+    input=$1
+
+    [ -n "$(probe_value "$input" stream=index a:0)" ]
+}
+
 clip_can_stream_copy() {
     input=$1
 
@@ -1587,6 +1593,16 @@ if [ "$extract_audio" = true ]; then
     if [ -n "$clip_start" ] || [ -n "$clip_end" ] || [ -n "$fps" ] || [ "$cfr" = true ] || [ "$preserve_metadata" = true ] || [ "$clear_metadata" = true ] || [ "${#metadata_args[@]}" -gt 0 ]; then
         error "--extract-audio cannot be combined with video or metadata options"
         exit 2
+    fi
+
+    if ! have_command ffprobe; then
+        error "ffprobe is not installed or not on PATH"
+        exit 127
+    fi
+
+    if ! has_audio_stream "$input"; then
+        info "no audio stream found; no output created"
+        exit 0
     fi
 
     output=${requested_output:-$(derive_audio_output_path "$input")}
