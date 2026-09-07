@@ -2,7 +2,7 @@
 
 `clipcrank` is a command-line utility for video manipulation. The code is `bash` shell script, to run in a POSIX-compatible environment.
 
-`clipcrank` can convert (re-encode) many kinds of video files into standardized MP4 output using `ffmpeg`. It can also create clips based on starting and/or ending timestamps, capture one or more JPEG still frames from a video, add or replace audio using either a video or still image as the visual source, extract audio to MP3, remove audio from video, and change media containers without re-encoding.
+`clipcrank` can convert (re-encode) many kinds of video files into standardized MP4 output using `ffmpeg`. It can also create clips based on starting and/or ending timestamps, capture one or more JPEG still frames from a video, add or replace audio using either a video or still image as the visual source, extract audio to MP3, remove audio from video, add or replace an embedded video thumbnail, and change media containers without re-encoding.
 
 `clipcrank` is a wrapper for `ffmpeg`, intended to simplify the invocation of common `ffmpeg` operations and provide a more intuitive command-line interface. It does not replace `ffmpeg`; instead, it handles the underlying invocation and options for common video conversion, clipping, frame-capture, metadata, audio, and remuxing tasks.
 
@@ -15,6 +15,7 @@
 - Creates H.264/AAC MP4 video from a still image plus audio
 - Extracts audio from video to MP3
 - Removes audio from video
+- Adds or replaces an embedded video thumbnail
 - Remuxes media to a different container without re-encoding
 - Displays technical media information
 - Cleans up partial output on failure or interruption
@@ -88,6 +89,7 @@ The available operations currently are:
 - `--extract-audio` — extract the first audio stream as MP3
 - `--remove-audio` — remove the audio stream and create H.264 MP4 output
 - `--remux` — change the media container without re-encoding streams
+- `--add-thumbnail` — add or replace an embedded thumbnail on MP4 video output
 - `--info` — display technical media information and exit
 - `--show-metadata` — display metadata and exit
 - `--frame TIME` — capture one or more JPEG frames
@@ -143,6 +145,54 @@ Use `--remove-audio` to create an H.264 MP4 containing the video stream without 
 
 The output filename is mandatory. No default output filename is generated.
 
+### Adding or replacing a thumbnail
+
+Use `--add-thumbnail` to add an embedded thumbnail to an MP4 video. Both input and output filenames are mandatory.
+
+With no thumbnail selector, ClipCrank uses the first frame of the video:
+
+```sh
+./clipcrank --add-thumbnail input.mp4 output.mp4
+```
+
+This is equivalent to:
+
+```sh
+./clipcrank --add-thumbnail --frame 0 input.mp4 output.mp4
+```
+
+Use `--frame TIME` to choose a different frame from the video:
+
+```sh
+./clipcrank --add-thumbnail --frame 12.500 input.mp4 output.mp4
+```
+
+The timestamp uses the normal `[[h:]m:]s[.ms]` syntax and must be before the end of the input video.
+
+Use `--image IMAGE` to supply a separate still image:
+
+```sh
+./clipcrank --add-thumbnail --image lenna.png input.mp4 output.mp4
+```
+
+The supplied image must exist and be readable. ClipCrank accepts still-image formats that the installed FFmpeg build can decode. It does not automatically crop or resize the image; its dimensions and aspect ratio are retained where supported.
+
+The video's ordinary video and audio streams are copied without re-encoding. The thumbnail image itself may be converted as required for MP4 compatibility.
+
+If the input already contains an embedded thumbnail, ClipCrank refuses to add another one by default. Use `--replace` to replace the existing thumbnail:
+
+```sh
+./clipcrank --add-thumbnail --replace input.mp4 output.mp4
+./clipcrank --add-thumbnail --replace --frame 12.500 input.mp4 output.mp4
+./clipcrank --add-thumbnail --replace --image lenna.png input.mp4 output.mp4
+```
+
+If `--replace` is used on a video that does not already contain a thumbnail, ClipCrank simply adds the new thumbnail.
+
+`--replace` is different from `--force`: `--replace` allows replacement of an embedded thumbnail, while `--force` allows replacement of an existing output file.
+
+Whether a particular media player, file manager, or operating system displays the embedded image as the video's thumbnail depends on that software.
+
 ### Remuxing
 
 Use `--remux` to change the media container without re-encoding the streams:
@@ -166,7 +216,7 @@ By default, `clipcrank` refuses to overwrite an existing output file. Use `-f` o
 ./clipcrank -f --frame 10 --interval 5 --count 4 input.mp4
 ```
 
-This applies to recoding, clipping, audio operations, remuxing, single-frame capture, and every output in multi-frame capture. Temporary files are still used, so the existing final output is replaced only after the new output has been successfully created.
+This applies to recoding, clipping, audio operations, thumbnail operations, remuxing, single-frame capture, and every output in multi-frame capture. Temporary files are still used, so the existing final output is replaced only after the new output has been successfully created.
 
 ## Media Information
 
@@ -281,7 +331,7 @@ Use `--reencode` with `--fps N` to convert output video to an explicit frame rat
 
 ## Frame-capture option compatibility
 
-`--frame` cannot be combined with `--reencode`, `--add-audio`, `--extract-audio`, `--remove-audio`, `--remux`, `--show-metadata`, `--start`, `--end`, `--fps`, `--cfr`, or MP4 metadata options.
+`--frame` cannot be combined with `--reencode`, `--add-audio`, `--extract-audio`, `--remove-audio`, `--remux`, `--show-metadata`, `--start`, `--end`, `--fps`, `--cfr`, or MP4 metadata options when used for JPEG frame capture. With `--add-thumbnail`, `--frame TIME` instead selects the video frame to use as the embedded thumbnail.
 
 ## Testing
 
