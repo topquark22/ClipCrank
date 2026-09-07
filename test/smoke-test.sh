@@ -31,6 +31,11 @@ run_expect_failure_message "copy stream and reencode should conflict" "--copy-st
 run_expect_failure_message "removed trim-seconds option should fail" "unknown option: --trim-seconds" "$target_script" --trim-seconds 0.04 "$tmp_dir/missing.flv"
 run_expect_failure_message "remove audio requires output file" "Usage:" "$target_script" --remove-audio "$tmp_dir/missing.mp4"
 run_expect_failure_message "remux requires output file" "Usage:" "$target_script" --remux "$tmp_dir/missing.mp4"
+run_expect_failure_message "add thumbnail requires output file" "Usage:" "$target_script" --add-thumbnail "$tmp_dir/missing.mp4"
+run_expect_failure_message "thumbnail image requires add-thumbnail" "--image requires --add-thumbnail" "$target_script" --image "examples/thumbnail.jpg" "$tmp_dir/missing.mp4"
+run_expect_failure_message "replace requires add-thumbnail" "--replace requires --add-thumbnail" "$target_script" --replace "$tmp_dir/missing.mp4"
+run_expect_failure_message "thumbnail frame and image should conflict" "--frame and --image cannot be used together with --add-thumbnail" "$target_script" --add-thumbnail --frame 1 --image "examples/thumbnail.jpg" "$tmp_dir/missing.mp4" "$tmp_dir/out.mp4"
+run_expect_failure_message "thumbnail image must exist" "thumbnail image not found:" "$target_script" --add-thumbnail --image "$tmp_dir/thumbnail.png" "$tmp_dir/metadata.mp4" "$tmp_dir/thumbnail-output.mp4"
 
 run_expect_failure_message "jpeg quality requires frame mode" "--jpeg-quality requires --frame" "$target_script" --jpeg-quality 90 "$tmp_dir/missing.flv"
 run_expect_failure_message "removed frames option should fail" "unknown option: --frames" "$target_script" --frames 20 --interval 5 --count 2 "$tmp_dir/missing.flv"
@@ -211,6 +216,70 @@ if [ -f "$remuxed_video" ] &&
     pass "remux should preserve H.264 and AAC codecs"
 else
     fail "remux should preserve H.264 and AAC codecs"
+fi
+
+thumbnail_default="tmp/bah-thumbnail-default.mp4"
+thumbnail_frame="tmp/bah-thumbnail-frame.mp4"
+thumbnail_image_file="$sample_image"
+thumbnail_image_output="tmp/bah-thumbnail-image.mp4"
+thumbnail_replaced="tmp/bah-thumbnail-replaced.mp4"
+
+if "$target_script" --force --add-thumbnail "$created_video" "$thumbnail_default" >/dev/null 2>&1 && [ -f "$thumbnail_default" ]; then
+    pass "add thumbnail should use frame 0 by default"
+else
+    fail "add thumbnail should use frame 0 by default"
+fi
+if [ -f "$thumbnail_default" ] && [ "$(ffprobe -v error -select_streams v -show_entries stream_disposition=attached_pic -of csv=p=0 "$thumbnail_default" | tr -d '\r' | grep -c '^1$')" -ge 1 ]; then
+    pass "default thumbnail output should contain attached picture"
+else
+    fail "default thumbnail output should contain attached picture"
+fi
+if [ -f "$thumbnail_default" ] &&
+   [ "$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$thumbnail_default" | tr -d '\r')" = "h264" ] &&
+   [ "$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$thumbnail_default" | tr -d '\r')" = "aac" ]; then
+    pass "add thumbnail should preserve H.264 and AAC codecs"
+else
+    fail "add thumbnail should preserve H.264 and AAC codecs"
+fi
+if "$target_script" --force --add-thumbnail --frame 1 "$created_video" "$thumbnail_frame" >/dev/null 2>&1 && [ -f "$thumbnail_frame" ]; then
+    pass "add thumbnail should accept explicit frame timestamp"
+else
+    fail "add thumbnail should accept explicit frame timestamp"
+fi
+run_expect_failure_message "thumbnail frame beyond input duration should fail" "is at or beyond the input duration" "$target_script" --add-thumbnail --frame 20 "$created_video" "tmp/bah-thumbnail-bad-frame.mp4"
+
+if [ -f "$thumbnail_image_file" ]; then
+    if "$target_script" --force --add-thumbnail --image "$thumbnail_image_file" "$created_video" "$thumbnail_image_output" >/dev/null 2>&1 && [ -f "$thumbnail_image_output" ]; then
+        pass "add thumbnail should accept user supplied image"
+    else
+        fail "add thumbnail should accept user supplied image"
+    fi
+    if [ -f "$thumbnail_image_output" ] && [ "$(ffprobe -v error -select_streams v -show_entries stream_disposition=attached_pic -of csv=p=0 "$thumbnail_image_output" | tr -d '\r' | grep -c '^1$')" -ge 1 ]; then
+        pass "user supplied thumbnail output should contain attached picture"
+    else
+        fail "user supplied thumbnail output should contain attached picture"
+    fi
+else
+    fail "thumbnail image fixture should exist"
+    fail "user supplied thumbnail output should contain attached picture"
+fi
+
+run_expect_failure_message "add thumbnail should reject existing thumbnail without replace" "input already contains an attached thumbnail" "$target_script" --force --add-thumbnail "$thumbnail_default" "tmp/bah-thumbnail-second.mp4"
+
+if "$target_script" --force --add-thumbnail --replace --frame 1 "$thumbnail_default" "$thumbnail_replaced" >/dev/null 2>&1 && [ -f "$thumbnail_replaced" ]; then
+    pass "replace should replace existing thumbnail"
+else
+    fail "replace should replace existing thumbnail"
+fi
+if [ -f "$thumbnail_replaced" ] && [ "$(ffprobe -v error -select_streams v -show_entries stream_disposition=attached_pic -of csv=p=0 "$thumbnail_replaced" | tr -d '\r' | grep -c '^1$')" -eq 1 ]; then
+    pass "replace output should contain exactly one attached picture"
+else
+    fail "replace output should contain exactly one attached picture"
+fi
+if "$target_script" --force --add-thumbnail --replace "$created_video" "tmp/bah-thumbnail-replace-without-existing.mp4" >/dev/null 2>&1; then
+    pass "replace should add thumbnail when none exists"
+else
+    fail "replace should add thumbnail when none exists"
 fi
 
 extracted_audio="tmp/bah.mp3"

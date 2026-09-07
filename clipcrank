@@ -14,6 +14,9 @@ add_audio=false
 extract_audio=false
 remove_audio=false
 remux=false
+add_thumbnail=false
+thumbnail_image=
+replace_thumbnail=false
 show_info=false
 
 fps=
@@ -35,60 +38,71 @@ show_metadata=false
 
 usage() {
     cat <<EOF
-Usage: $progname [OPTIONS] INPUT [OUTPUT]
+Usage:
+  $progname OPERATION [OPTIONS] INPUT [OUTPUT]
+  $progname --add-audio [OPTIONS] VISUAL AUDIO [OUTPUT]
+  $progname --add-thumbnail [OPTIONS] INPUT OUTPUT
 
-Perform a selected video operation using ffmpeg.
+Video re-encoding and clipping:
+  --reencode                 Re-encode to H.264/AAC MP4
+  --start TIME               Start clip at TIME
+  --end TIME                 End clip at TIME
+  --copy-stream              Copy H.264/AAC streams when clipping
+  --fps N                    Set output frame rate
+  --cfr                      Force constant frame rate
 
-Arguments:
-  INPUT                    Path to input video file
-  OUTPUT                   Optional output path or multi-frame output base
+Audio:
+  --add-audio                Add or replace audio
+  --extract-audio            Extract first audio stream as MP3
+  --remove-audio             Remove audio: INPUT OUTPUT
 
-Operations:
-  --reencode                Re-encode input as standardized H.264/AAC MP4
-  --add-audio               Add or replace audio: VIDEO|IMAGE AUDIO [OUTPUT]
-  --extract-audio           Extract audio as MP3
-  --remove-audio            Remove audio: INPUT OUTPUT
-  --remux                   Change container without re-encoding: INPUT OUTPUT
-  --info                    Display technical media information and exit
-  --show-metadata           Display input metadata and exit
-  --frame TIME              Capture JPEG frame(s) starting at [[h:]m:]s[.ms]
+Thumbnail:
+  --add-thumbnail            Add an attached thumbnail: INPUT OUTPUT
+  --frame TIME               Select thumbnail frame with --add-thumbnail
+  --image IMAGE              Use supplied image with --add-thumbnail
+  --replace                  Replace existing thumbnail with --add-thumbnail
 
-Options:
-  -f, --force              Overwrite existing output files
-  --copy-stream            Copy streams when clipping instead of re-encoding
-  --metadata KEY=VALUE     Set an MP4 metadata field; may be repeated
-  --title TEXT             Set title metadata
-  --artist TEXT            Set artist metadata
-  --album TEXT             Set album metadata
-  --date TEXT              Set date metadata
-  --comment TEXT           Set comment metadata
-  --preserve-metadata      Preserve input global metadata before applying edits
-  --clear-metadata         Clear input global metadata before applying edits
-  --start TIME             Start output at [[h:]m:]s[.ms]; defaults to input start
-  --end TIME               End output at [[h:]m:]s[.ms]; defaults to input end
-  --interval TIME          Interval between frames; requires --frame and --count
-  --count N                Number of frames to capture; requires --frame and --interval
-  --jpeg-quality N         JPEG quality from 1 to 100; default 90
-  --fps N                  Convert output video to frame rate N
-  --cfr                    Force constant frame rate output; cannot be used with --fps
-  -h, --help               Show this help text
+Frame capture:
+  --frame TIME               Capture a JPEG frame
+  --interval TIME            Capture repeated frames at TIME intervals
+  --count N                  Number of frames to capture
+  --jpeg-quality N           JPEG quality from 1 to 100
+
+Metadata and information:
+  --info                     Display technical media information and exit
+  --show-metadata            Display stored metadata tags and exit
+  --metadata KEY=VALUE       Set an MP4 metadata field; may be repeated
+  --title TEXT               Set title metadata
+  --artist TEXT              Set artist metadata
+  --album TEXT               Set album metadata
+  --date TEXT                Set date metadata
+  --comment TEXT             Set comment metadata
+  --preserve-metadata        Preserve input metadata
+  --clear-metadata           Remove input metadata
+
+Container:
+  --remux                    Change container without re-encoding: INPUT OUTPUT
+
+General:
+  -f, --force                Replace an existing output file
+  -h, --help                 Show this help
+
+Timestamp format:
+  [[h:]m:]s[.ms]
 
 Examples:
-  $progname --reencode old-video.avi
-  $progname --reencode -f input.mov output.mp4
-  $progname --add-audio input.mp4 soundtrack.wav output.mp4
-  $progname --add-audio image.jpg soundtrack.wav output.mp4
+  $progname --reencode input.avi output.mp4
+  $progname --start 10 --end 20 input.mp4 clip.mp4
+  $progname --copy-stream --start 10 --end 20 input.mp4 clip.mp4
+  $progname --add-audio image.png audio.wav output.mp4
   $progname --extract-audio input.mp4 output.mp3
-  $progname --remove-audio input.mp4 silent.mp4
+  $progname --remove-audio input.mp4 output.mp4
+  $progname --frame 12.5 input.mp4 frame.jpg
+  $progname --add-thumbnail input.mp4 output.mp4
+  $progname --add-thumbnail --frame 12.5 input.mp4 output.mp4
+  $progname --add-thumbnail --image cover.jpg input.mp4 output.mp4
   $progname --remux input.mkv output.mp4
   $progname --info input.mov
-  $progname --show-metadata input.mov
-  $progname --start 12.500 --end 2:05 input.mp4 clip.mp4
-  $progname --copy-stream --start 12.500 --end 2:05 input.mp4 clip.mp4
-  $progname --reencode --start 12.500 --end 2:05 input.mov clip.mp4
-  $progname --frame 1:23.500 input.mp4
-  $progname --frame 10 --interval 5 --count 4 input.mp4
-  $progname --force --frame 1:00 --interval 10 --count 3 input.mp4 shots.jpg
 EOF
 }
 
@@ -512,6 +526,22 @@ validate_clip_bounds() {
 }
 
 validate_frame_modes() {
+    if [ "$add_thumbnail" = true ]; then
+        if [ -n "$frame_interval" ] || [ -n "$frame_count" ]; then
+            error "--interval and --count cannot be used with --add-thumbnail"
+            exit 2
+        fi
+        if [ "$jpeg_quality_set" = true ]; then
+            error "--jpeg-quality cannot be used with --add-thumbnail"
+            exit 2
+        fi
+        if [ -n "$frame_time" ]; then
+            validate_timestamp "$frame_time" frame
+            frame_seconds=$(timestamp_to_seconds "$frame_time")
+        fi
+        return
+    fi
+
     if [ -z "$frame_time" ]; then
         if [ -n "$frame_interval" ]; then
             error "--interval requires --frame"
@@ -619,6 +649,19 @@ parse_args() {
                 remux=true
                 shift
                 ;;
+            --add-thumbnail)
+                add_thumbnail=true
+                shift
+                ;;
+            --image)
+                require_option_value "$1" "$#"
+                thumbnail_image=$2
+                shift 2
+                ;;
+            --replace)
+                replace_thumbnail=true
+                shift
+                ;;
             --info)
                 show_info=true
                 shift
@@ -714,6 +757,21 @@ parse_args() {
 
     if [ -n "$fps" ] && [ "$cfr" = true ]; then
         error "--fps and --cfr cannot be used together"
+        exit 2
+    fi
+
+    if [ -n "$thumbnail_image" ] && [ "$add_thumbnail" = false ]; then
+        error "--image requires --add-thumbnail"
+        exit 2
+    fi
+
+    if [ "$replace_thumbnail" = true ] && [ "$add_thumbnail" = false ]; then
+        error "--replace requires --add-thumbnail"
+        exit 2
+    fi
+
+    if [ "$add_thumbnail" = true ] && [ -n "$thumbnail_image" ] && [ -n "$frame_time" ]; then
+        error "--frame and --image cannot be used together with --add-thumbnail"
         exit 2
     fi
 
@@ -1035,6 +1093,84 @@ run_remux() {
         "$tmp_output"
 }
 
+attached_thumbnail_indexes() {
+    input=$1
+
+    ffprobe \
+        -v error \
+        -select_streams v \
+        -show_entries stream=index:stream_disposition=attached_pic \
+        -of csv=p=0 \
+        "$input" 2>/dev/null |
+    tr -d '\r' |
+    awk -F, '$2 == 1 { print $1 }'
+}
+
+has_attached_thumbnail() {
+    input=$1
+
+    [ -n "$(attached_thumbnail_indexes "$input")" ]
+}
+
+ordinary_video_stream_count() {
+    input=$1
+
+    ffprobe \
+        -v error \
+        -select_streams v \
+        -show_entries stream=index:stream_disposition=attached_pic \
+        -of csv=p=0 \
+        "$input" 2>/dev/null |
+    tr -d '\r' |
+    awk -F, '$2 != 1 { count++ } END { print count + 0 }'
+}
+
+prepare_thumbnail_image() {
+    source_image=$1
+    prepared_thumbnail=$2
+
+    ffmpeg \
+        -hide_banner \
+        -loglevel error \
+        -y \
+        -i "$source_image" \
+        -map 0:v:0 \
+        -frames:v 1 \
+        -q:v "$(jpeg_qscale)" \
+        -f image2 \
+        "$prepared_thumbnail"
+}
+
+run_add_thumbnail() {
+    input=$1
+    thumbnail=$2
+    tmp_output=$3
+    replace_existing=$4
+
+    map_args=( -map 0 )
+    if [ "$replace_existing" = true ]; then
+        while IFS= read -r stream_index; do
+            [ -z "$stream_index" ] || map_args+=( -map "-0:$stream_index" )
+        done < <(attached_thumbnail_indexes "$input")
+    fi
+
+    thumbnail_video_index=$(ordinary_video_stream_count "$input")
+
+    ffmpeg \
+        -hide_banner \
+        -loglevel error \
+        -y \
+        -i "$input" \
+        -i "$thumbnail" \
+        "${map_args[@]}" \
+        -map 1:v:0 \
+        -c copy \
+        -disposition:v:"$thumbnail_video_index" attached_pic \
+        -movflags +faststart \
+        -f mp4 \
+        "$tmp_output"
+}
+
 multi_frame_output_base() {
     input=$1
     requested=${2:-}
@@ -1061,9 +1197,12 @@ operation_count=0
 [ "$extract_audio" = false ] || operation_count=$((operation_count + 1))
 [ "$remove_audio" = false ] || operation_count=$((operation_count + 1))
 [ "$remux" = false ] || operation_count=$((operation_count + 1))
+[ "$add_thumbnail" = false ] || operation_count=$((operation_count + 1))
 [ "$show_info" = false ] || operation_count=$((operation_count + 1))
 [ "$show_metadata" = false ] || operation_count=$((operation_count + 1))
-[ -z "$frame_time" ] || operation_count=$((operation_count + 1))
+if [ "$add_thumbnail" = false ]; then
+    [ -z "$frame_time" ] || operation_count=$((operation_count + 1))
+fi
 
 clip_requested=false
 if [ -n "$clip_start" ] || [ -n "$clip_end" ]; then
@@ -1095,7 +1234,7 @@ if [ "$add_audio" = true ]; then
         usage >&2
         exit 2
     fi
-elif [ "$remove_audio" = true ] || [ "$remux" = true ]; then
+elif [ "$remove_audio" = true ] || [ "$remux" = true ] || [ "$add_thumbnail" = true ]; then
     if [ "${#positional_args[@]}" -ne 2 ]; then
         usage >&2
         exit 2
@@ -1113,6 +1252,11 @@ requested_output=${positional_args[1]:-}
 if [ "$add_audio" = true ]; then
     audio_input=${positional_args[1]}
     requested_output=${positional_args[2]:-}
+fi
+
+if [ "$add_thumbnail" = true ] && [ -n "$thumbnail_image" ] && [ ! -e "$thumbnail_image" ]; then
+    error "thumbnail image not found: $thumbnail_image"
+    exit 1
 fi
 
 if [ "$show_info" = true ]; then
@@ -1275,6 +1419,118 @@ if [ "$copy_stream" = true ]; then
     fi
 
     mv -f -- "$tmp_output" "$output"
+    trap - EXIT INT TERM HUP
+    printf 'created: %s\n' "$output"
+    exit 0
+fi
+
+
+if [ "$add_thumbnail" = true ]; then
+    if [ -n "$clip_start" ] || [ -n "$clip_end" ] || [ -n "$fps" ] || [ "$cfr" = true ] || [ "$preserve_metadata" = true ] || [ "$clear_metadata" = true ] || [ "${#metadata_args[@]}" -gt 0 ]; then
+        error "--add-thumbnail cannot be combined with clipping, frame-rate, or metadata options"
+        exit 2
+    fi
+
+    output=$requested_output
+
+    case "$output" in
+        *.mp4) ;;
+        *)
+            error "thumbnail output must use .mp4"
+            exit 2
+            ;;
+    esac
+
+    if [ "$input" = "$output" ]; then
+        error "input and output paths must be different"
+        exit 1
+    fi
+
+    if [ "$force" = false ] && [ -e "$output" ]; then
+        error "output file already exists: $output"
+        exit 1
+    fi
+
+    if ! have_command ffprobe; then
+        error "ffprobe is not installed or not on PATH"
+        exit 127
+    fi
+
+    if has_attached_thumbnail "$input" && [ "$replace_thumbnail" = false ]; then
+        error "input already contains an attached thumbnail; use --replace to replace it"
+        exit 2
+    fi
+
+    if [ -n "$thumbnail_image" ]; then
+        if [ ! -e "$thumbnail_image" ]; then
+            error "thumbnail image not found: $thumbnail_image"
+            exit 1
+        fi
+
+        if [ ! -f "$thumbnail_image" ]; then
+            error "thumbnail image path is not a regular file: $thumbnail_image"
+            exit 1
+        fi
+
+        if [ ! -r "$thumbnail_image" ]; then
+            error "thumbnail image is not readable: $thumbnail_image"
+            exit 1
+        fi
+
+        if [ "$(classify_visual_input "$thumbnail_image")" != image ]; then
+            error "thumbnail input is not a still image: $thumbnail_image"
+            exit 1
+        fi
+    else
+        thumbnail_time=${frame_seconds:-0.000}
+        if [ -z "$frame_time" ]; then
+            frame_time=0
+            thumbnail_time=0.000
+        fi
+
+        input_duration=$(probe_value "$input" format=duration)
+        if [ -z "$input_duration" ] || [ "$input_duration" = "N/A" ]; then
+            error "could not determine input duration"
+            exit 1
+        fi
+
+        if awk "BEGIN {exit !($thumbnail_time >= $input_duration)}"; then
+            error "thumbnail frame $thumbnail_time is at or beyond the input duration of $(awk "BEGIN {printf \"%.3f\", $input_duration}") seconds"
+            exit 2
+        fi
+    fi
+
+    tmp_output="${output%.mp4}.part.mp4"
+    tmp_thumbnail="${output%.mp4}.thumbnail.part.jpg"
+
+    cleanup() {
+        [ ! -e "$tmp_output" ] || rm -f "$tmp_output"
+        [ ! -e "$tmp_thumbnail" ] || rm -f "$tmp_thumbnail"
+    }
+
+    trap cleanup EXIT INT TERM HUP
+
+    if [ -n "$thumbnail_image" ]; then
+        info "using thumbnail image: $thumbnail_image"
+        if ! prepare_thumbnail_image "$thumbnail_image" "$tmp_thumbnail"; then
+            error "thumbnail image conversion failed"
+            exit 1
+        fi
+    else
+        info "capturing thumbnail frame at $frame_time"
+        if ! capture_frame "$input" "$thumbnail_time" "$tmp_thumbnail"; then
+            error "thumbnail frame capture failed"
+            exit 1
+        fi
+    fi
+
+    if ! run_add_thumbnail "$input" "$tmp_thumbnail" "$tmp_output" "$replace_thumbnail"; then
+        error "thumbnail addition failed"
+        exit 1
+    fi
+
+    mv -f -- "$tmp_output" "$output"
+    rm -f -- "$tmp_thumbnail"
     trap - EXIT INT TERM HUP
     printf 'created: %s\n' "$output"
     exit 0
