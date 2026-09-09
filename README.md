@@ -119,7 +119,7 @@ The replacement audio may use any format that the installed `ffmpeg` can decode.
 ./clipcrank --add-audio image.tiff soundtrack.mp3 output.mp4
 ```
 
-Still-image input is detected from the media itself rather than from a filename-extension whitelist, so any still-image format that the installed FFmpeg can decode may be used. The still image is displayed for the duration of the audio. If the output filename is omitted for still-image input, the default output basename is derived from the audio filename with an `.mp4` extension.
+Still-image input is detected from the media itself rather than from a filename-extension whitelist, so any still-image format that the installed FFmpeg can decode may be used. The still image is displayed for the duration of the audio. If the output filename is omitted for still-image input, the default output basename is derived from the audio filename plus an `.mp4` extension.
 
 ### Extracting audio
 
