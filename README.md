@@ -28,8 +28,6 @@ Linux and other POSIX-like systems can normally use their native Bash and FFmpeg
 
 Windows does not provide a native POSIX shell environment. To run ClipCrank on Windows, use a POSIX-compatible environment such as Cygwin. Native Windows builds of `ffmpeg` and `ffprobe` may be used from Cygwin and are the recommended configuration tested during ClipCrank development. See [INSTALL.md](./INSTALL.md) for installation instructions and important notes about Cygwin paths when using native Windows FFmpeg executables.
 
-No ImageMagick or other image-processing package is required.
-
 ## Supported Input Video Formats
 
 `clipcrank` does not maintain its own list of input formats. It relies on the locally installed `ffmpeg`, so it can accept any video container and codec combination that the local `ffmpeg` build can demux and decode.
