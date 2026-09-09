@@ -93,7 +93,7 @@ The available operations currently are:
 
 Only one operation may be selected at a time.
 
-### Recoding
+### Re-encoding
 
 Use `--reencode` to convert an input video into standardized MP4 output:
 
