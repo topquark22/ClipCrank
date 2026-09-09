@@ -18,7 +18,6 @@
 - Adds or replaces an embedded video thumbnail
 - Remuxes media to a different container without re-encoding
 - Displays technical media information
-- Cleans up partial output on failure or interruption
 
 ## Requirements
 
