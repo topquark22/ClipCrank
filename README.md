@@ -18,7 +18,6 @@
 - Adds or replaces an embedded video thumbnail
 - Remuxes media to a different container without re-encoding
 - Displays technical media information
-- Cleans up partial output on failure or interruption
 
 ## Requirements
 
@@ -28,8 +27,6 @@
 Linux and other POSIX-like systems can normally use their native Bash and FFmpeg packages.
 
 Windows does not provide a native POSIX shell environment. To run ClipCrank on Windows, use a POSIX-compatible environment such as Cygwin. Native Windows builds of `ffmpeg` and `ffprobe` may be used from Cygwin and are the recommended configuration tested during ClipCrank development. See [INSTALL.md](./INSTALL.md) for installation instructions and important notes about Cygwin paths when using native Windows FFmpeg executables.
-
-No ImageMagick or other image-processing package is required.
 
 ## Supported Input Video Formats
 
@@ -96,7 +93,7 @@ The available operations currently are:
 
 Only one operation may be selected at a time.
 
-### Recoding
+### Re-encoding
 
 Use `--reencode` to convert an input video into standardized MP4 output:
 
@@ -122,7 +119,7 @@ The replacement audio may use any format that the installed `ffmpeg` can decode.
 ./clipcrank --add-audio image.tiff soundtrack.mp3 output.mp4
 ```
 
-Still-image input is detected from the media itself rather than from a filename-extension whitelist, so any still-image format that the installed FFmpeg can decode may be used. The still image is displayed for the duration of the audio. If the output filename is omitted for still-image input, the default output basename is derived from the audio filename with an `.mp4` extension.
+Still-image input is detected from the media itself rather than from a filename-extension whitelist, so any still-image format that the installed FFmpeg can decode may be used. The still image is displayed for the duration of the audio. If the output filename is omitted for still-image input, the default output basename is derived from the audio filename plus an `.mp4` extension.
 
 ### Extracting audio
 
