@@ -352,5 +352,32 @@ else
     fail "video add-audio output should use AAC audio"
 fi
 
+
+short_audio="tmp/short-audio.wav"
+long_audio="tmp/long-audio.wav"
+short_audio_video="tmp/Big_Buck_Bunny_short_audio.mp4"
+long_audio_video="tmp/Big_Buck_Bunny_long_audio.mp4"
+
+ffmpeg -hide_banner -loglevel error -y -f lavfi -i anullsrc=r=48000:cl=stereo -t 2 "$short_audio"
+ffmpeg -hide_banner -loglevel error -y -f lavfi -i anullsrc=r=48000:cl=stereo -t 15 "$long_audio"
+
+if "$target_script" --force --add-audio "$sample_video" "$short_audio" "$short_audio_video" >/dev/null 2>&1 &&
+   video_duration=$(ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "$short_audio_video" | tr -d '\r') &&
+   audio_duration=$(ffprobe -v error -select_streams a:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "$short_audio_video" | tr -d '\r') &&
+   awk "BEGIN { exit !(($video_duration >= 9.9 && $video_duration <= 10.1) && ($audio_duration >= 9.9 && $audio_duration <= 10.1)) }"; then
+    pass "short replacement audio should be padded to video duration"
+else
+    fail "short replacement audio should be padded to video duration"
+fi
+
+if "$target_script" --force --add-audio "$sample_video" "$long_audio" "$long_audio_video" >/dev/null 2>&1 &&
+   video_duration=$(ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "$long_audio_video" | tr -d '\r') &&
+   audio_duration=$(ffprobe -v error -select_streams a:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "$long_audio_video" | tr -d '\r') &&
+   awk "BEGIN { exit !(($video_duration >= 9.9 && $video_duration <= 10.1) && ($audio_duration >= 9.9 && $audio_duration <= 10.1)) }"; then
+    pass "long replacement audio should be trimmed to video duration"
+else
+    fail "long replacement audio should be trimmed to video duration"
+fi
+
 say; say "Summary:"; say "  Passed: $pass_count"; say "  Failed: $fail_count"
 if [ "$fail_count" -ne 0 ]; then exit 1; fi

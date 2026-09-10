@@ -1002,12 +1002,15 @@ EOF
     fi
 
     first_input_args=()
+    audio_filter_args=()
     shortest_args=()
     if [ "$input_is_image" = true ]; then
         first_input_args=( -stream_loop -1 )
         shortest_args=( -shortest )
     else
         first_input_args=( -fflags +genpts )
+        audio_filter_args=( -af apad )
+        shortest_args=( -shortest )
     fi
 
     ffmpeg \
@@ -1030,6 +1033,7 @@ EOF
         -movflags +faststart \
         -c:a aac \
         -b:a 192k \
+        "${audio_filter_args[@]}" \
         "${shortest_args[@]}" \
         -f mp4 \
         "$tmp_output"
