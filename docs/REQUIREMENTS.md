@@ -10,7 +10,7 @@ The script is intended to be:
 - portable across environments where the required FFmpeg tools are available,
 - and robust enough to handle old or awkward media formats when `ffmpeg` can decode them.
 
-The current implementation supports H.264/AAC MP4 re-encoding, video clipping, JPEG frame capture, metadata inspection and editing, frame-rate control, audio addition or replacement, still-image plus audio video creation, MP3 audio extraction, audio removal, container remuxing, and safe overwrite handling.
+The current implementation supports H.264/AAC MP4 re-encoding, video and audio clipping, JPEG frame capture, metadata inspection and editing for MP4 and MP3 output, frame-rate control, audio addition or replacement, still-image plus audio video creation, MP3 audio extraction, audio removal, container remuxing, and safe overwrite handling.
 
 Operations must normally be selected explicitly. `--start` or `--end` may select clip creation directly, with re-encoding as the default behavior. Running the script with an input file but no operation or clip boundary shall print usage information rather than implicitly re-encoding the file.
 
@@ -37,7 +37,9 @@ Only one operation may be selected per invocation.
 
 `--copy-stream` shall be available as an explicit clipping option to request stream copying instead of re-encoding.
 
-If no operation or clip boundary is selected, the script shall print a usage message and exit non-zero.
+When one or more metadata-editing options are supplied without another primary operation or clip boundary, the metadata options shall select a standalone metadata-editing operation. Standalone metadata editing shall currently be supported for MP3 input and output.
+
+If no operation, clip boundary, or standalone metadata edit is selected, the script shall print a usage message and exit non-zero.
 
 ### 2. Input Handling
 
@@ -205,9 +207,15 @@ The operation shall extract the first audio stream from the input and encode it 
 
 The operation shall omit video, subtitle, and data streams.
 
-If the input does not contain a usable audio stream, the operation shall fail without creating the final output file.
+If the input does not contain a usable audio stream, the operation shall print an informational message, create no output file, and exit successfully.
 
-`--extract-audio` shall not accept clipping, frame-rate, or metadata options.
+`--extract-audio` shall not accept clipping or frame-rate options.
+
+`--extract-audio` shall accept metadata-editing options. When metadata options are supplied, the operation shall extract and encode the first audio stream as MP3 and shall write the requested metadata to the resulting MP3 in the same output operation.
+
+By default, metadata that FFmpeg can map from the source input shall be preserved in extracted MP3 output. `--clear-metadata` shall suppress inherited metadata. Explicit metadata options shall be applied after inherited or cleared metadata and shall take precedence over any inherited field with the same key.
+
+Attached pictures or other video streams from the source shall not be copied into `--extract-audio` MP3 output unless a future requirement explicitly adds that behavior.
 
 ### 10. Remove Audio
 
@@ -271,7 +279,13 @@ For audio-only clipping:
 - when both are supplied, only the requested interval shall be retained,
 - the same timestamp syntax and bounds validation used for video clipping shall apply,
 - clipping timestamps shall be interpreted against the input media duration,
-- an explicit output path shall be required when the default `.mp3` path would be identical to the input path.
+- an explicit output path shall be required when the default `.mp3` path would be identical to the input path,
+- metadata-editing options shall be accepted,
+- existing descriptive metadata shall be preserved by default,
+- `--clear-metadata` shall remove inherited metadata before explicitly supplied metadata is applied,
+- explicitly supplied metadata shall take precedence over inherited metadata with the same key,
+- an attached-picture stream shall not cause an MP3 to be classified as ordinary video,
+- attached cover art shall be dropped when audio-only clipping is performed, and the script shall print a warning when this occurs.
 
 The script shall support `--copy-stream` only for video clipping and only in combination with `--start` or `--end`.
 
@@ -342,7 +356,7 @@ Metadata inspection shall use `ffprobe`, shall not create output, and shall not 
 
 `--show-metadata` shall remain semantically limited to stored descriptive metadata tags. Technical media properties such as codec, resolution, frame rate, duration, and bitrate shall belong to `--info` rather than `--show-metadata`.
 
-The script shall support the following metadata controls for re-encoded MP4 output:
+The script shall support the following metadata controls for MP4 and MP3 output:
 
 - `--metadata KEY=VALUE`, repeatable for arbitrary metadata fields,
 - `--title TEXT`,
@@ -355,7 +369,35 @@ The script shall support the following metadata controls for re-encoded MP4 outp
 
 `--preserve-metadata` and `--clear-metadata` shall not be accepted together.
 
-Metadata options shall not be accepted with frame capture, `--extract-audio`, `--remove-audio`, or `--remux`.
+When metadata-editing options are supplied without another primary operation or clip boundary, the script shall perform a standalone MP3 metadata update:
+
+```text
+clipcrank [METADATA OPTIONS] INPUT.mp3 OUTPUT.mp3
+```
+
+For standalone MP3 metadata editing:
+
+- both input and output shall use the `.mp3` extension,
+- an explicit output path shall be required,
+- input and output paths shall be different,
+- normal output-exists protection and `--force` behavior shall apply,
+- the MP3 audio stream shall be copied without re-encoding,
+- existing metadata shall be preserved by default,
+- `--preserve-metadata` shall explicitly request the same preservation behavior,
+- `--clear-metadata` shall remove inherited metadata,
+- explicitly supplied metadata shall be applied after inherited or cleared metadata and shall take precedence over any existing field with the same key,
+- embedded cover art shall be preserved during metadata-only editing,
+- temporary-output and atomic replacement behavior shall match other output-producing operations.
+
+Metadata-editing options shall also be accepted with:
+
+- `--extract-audio`,
+- audio-only clipping selected by `--start`, `--end`, or both,
+- existing MP4 re-encoding operations that already support metadata editing.
+
+For `--extract-audio` and audio-only clipping, metadata shall be written as part of the MP3-producing FFmpeg operation rather than by a second re-encoding pass.
+
+Metadata options shall not be accepted with frame capture, `--remove-audio`, `--remux`, or `--copy-stream` clipping.
 
 ### 15. Media Information
 
@@ -599,6 +641,22 @@ At minimum, testing should cover:
 - frame filename normalization,
 - multi-frame filename sorting across an hour boundary,
 - metadata inspection,
+- standalone MP3 metadata editing with `--title`, `--artist`, `--album`, `--date`, `--comment`, and arbitrary `--metadata KEY=VALUE`,
+- preservation of unspecified MP3 metadata fields by default,
+- clearing MP3 metadata with `--clear-metadata`,
+- explicit `--preserve-metadata` behavior for MP3 metadata operations,
+- verification that standalone MP3 metadata editing does not re-encode the audio stream,
+- preservation of embedded cover art during standalone MP3 metadata editing using the committed `examples/with_image.mp3` fixture,
+- explicit-output requirement for standalone MP3 metadata editing,
+- normal output-exists and `--force` behavior for standalone MP3 metadata editing,
+- `--extract-audio` combined with metadata-editing options,
+- preservation of source metadata by default during `--extract-audio` where FFmpeg can map it,
+- `--clear-metadata` combined with `--extract-audio`,
+- audio-only clipping combined with metadata-editing options,
+- preservation of existing MP3 metadata by default during audio-only clipping,
+- `--clear-metadata` combined with audio-only clipping,
+- precedence of explicitly supplied metadata over inherited metadata for extracted and trimmed MP3 output,
+- warning and removal of embedded cover art during audio-only clipping,
 - planned `--info` technical media inspection,
 - encoder-detection behavior,
 - default `--add-thumbnail` extraction from frame 0,
