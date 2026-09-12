@@ -295,6 +295,70 @@ else
     fail "extracted audio should use MP3 codec"
 fi
 
+
+audio_trim_source="tmp/audio-trim-source.mp3"
+audio_trim_start="tmp/audio-trim-start.mp3"
+audio_trim_end="tmp/audio-trim-end.mp3"
+audio_trim_both="tmp/audio-trim-both.mp3"
+audio_trim_millis="tmp/audio-trim-millis.mp3"
+audio_trim_existing="tmp/audio-trim-existing.mp3"
+
+ffmpeg -hide_banner -loglevel error -y -i "$sample_audio" -c:a libmp3lame -b:a 192k "$audio_trim_source"
+
+if "$target_script" --force --start 1 "$audio_trim_source" "$audio_trim_start" >/dev/null 2>&1 &&
+   [ -f "$audio_trim_start" ] &&
+   [ "$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$audio_trim_start" | tr -d '\r')" = "mp3" ]; then
+    pass "audio-only clipping should support --start"
+else
+    fail "audio-only clipping should support --start"
+fi
+
+if "$target_script" --force --end 2 "$audio_trim_source" "$audio_trim_end" >/dev/null 2>&1 &&
+   [ -f "$audio_trim_end" ] &&
+   audio_duration=$(ffprobe -v error -select_streams a:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "$audio_trim_end" | tr -d '\r') &&
+   awk "BEGIN { exit !($audio_duration >= 1.9 && $audio_duration <= 2.1) }"; then
+    pass "audio-only clipping should support --end"
+else
+    fail "audio-only clipping should support --end"
+fi
+
+if "$target_script" --force --start 1 --end 3 "$audio_trim_source" "$audio_trim_both" >/dev/null 2>&1 &&
+   [ -f "$audio_trim_both" ] &&
+   audio_duration=$(ffprobe -v error -select_streams a:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "$audio_trim_both" | tr -d '\r') &&
+   awk "BEGIN { exit !($audio_duration >= 1.9 && $audio_duration <= 2.1) }"; then
+    pass "audio-only clipping should support --start and --end together"
+else
+    fail "audio-only clipping should support --start and --end together"
+fi
+
+if "$target_script" --force --start 0.500 --end 1.750 "$audio_trim_source" "$audio_trim_millis" >/dev/null 2>&1 &&
+   [ -f "$audio_trim_millis" ] &&
+   audio_duration=$(ffprobe -v error -select_streams a:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "$audio_trim_millis" | tr -d '\r') &&
+   awk "BEGIN { exit !($audio_duration >= 1.15 && $audio_duration <= 1.35) }"; then
+    pass "audio-only clipping should support millisecond timestamps"
+else
+    fail "audio-only clipping should support millisecond timestamps"
+fi
+
+run_expect_failure_message "audio-only clip start beyond duration should fail" "is at or beyond the input duration" "$target_script" --start 999 "$audio_trim_source" "$tmp_dir/audio-bad-start.mp3"
+run_expect_failure_message "audio-only clip end beyond duration should fail" "is beyond the input duration" "$target_script" --end 999 "$audio_trim_source" "$tmp_dir/audio-bad-end.mp3"
+
+run_expect_failure_message "audio-only clipping should reject copy stream" "--copy-stream" "$target_script" --copy-stream --start 1 "$audio_trim_source" "$tmp_dir/audio-copy.mp3"
+
+run_expect_failure_message "audio-only MP3 clipping should require explicit output" "output" "$target_script" --end 2 "$audio_trim_source"
+
+cp -f "$audio_trim_source" "$audio_trim_existing"
+run_expect_failure_message "audio-only clipping should protect existing output" "output file already exists" "$target_script" --end 2 "$audio_trim_source" "$audio_trim_existing"
+
+if "$target_script" --force --end 2 "$audio_trim_source" "$audio_trim_existing" >/dev/null 2>&1 &&
+   [ -f "$audio_trim_existing" ] &&
+   audio_duration=$(ffprobe -v error -select_streams a:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "$audio_trim_existing" | tr -d '\r') &&
+   awk "BEGIN { exit !($audio_duration >= 1.9 && $audio_duration <= 2.1) }"; then
+    pass "audio-only clipping should allow overwrite with --force"
+else
+    fail "audio-only clipping should allow overwrite with --force"
+fi
+
 silent_video="tmp/bah-silent.mp4"
 
 if "$target_script" --force --remove-audio "$created_video" "$silent_video" >/dev/null 2>&1 && [ -f "$silent_video" ]; then
