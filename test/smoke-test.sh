@@ -359,6 +359,34 @@ else
     fail "audio-only clipping should allow overwrite with --force"
 fi
 
+
+cover_art_image="tmp/audio-cover.jpg"
+audio_with_cover="tmp/audio-with-cover.mp3"
+audio_with_cover_trimmed="tmp/audio-with-cover-trimmed.mp3"
+
+ffmpeg -hide_banner -loglevel error -y -i "$sample_image" -frames:v 1 "$cover_art_image"
+ffmpeg -hide_banner -loglevel error -y \
+    -i "$audio_trim_source" \
+    -i "$cover_art_image" \
+    -map 0:a:0 \
+    -map 1:v:0 \
+    -c:a copy \
+    -c:v mjpeg \
+    -id3v2_version 3 \
+    -metadata:s:v title="Album cover" \
+    -metadata:s:v comment="Cover (front)" \
+    "$audio_with_cover"
+
+if output=$("$target_script" --force --end 2 "$audio_with_cover" "$audio_with_cover_trimmed" 2>&1) &&
+   [ -f "$audio_with_cover_trimmed" ] &&
+   case "$output" in *"warning: embedded cover art will be dropped"*) true ;; *) false ;; esac &&
+   [ "$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$audio_with_cover_trimmed" | tr -d '\r')" = "mp3" ] &&
+   [ -z "$(ffprobe -v error -select_streams v -show_entries stream=index -of default=noprint_wrappers=1:nokey=1 "$audio_with_cover_trimmed" | tr -d '\r')" ]; then
+    pass "audio-only clipping should drop embedded cover art with warning"
+else
+    fail "audio-only clipping should drop embedded cover art with warning"
+fi
+
 silent_video="tmp/bah-silent.mp4"
 
 if "$target_script" --force --remove-audio "$created_video" "$silent_video" >/dev/null 2>&1 && [ -f "$silent_video" ]; then

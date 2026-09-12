@@ -147,7 +147,27 @@ has_audio_stream() {
 has_video_stream() {
     input=$1
 
-    [ -n "$(probe_value "$input" stream=index v:0)" ]
+    ffprobe \
+        -v error \
+        -select_streams v \
+        -show_entries stream=index:stream_disposition=attached_pic \
+        -of csv=p=0 \
+        "$input" 2>/dev/null |
+    tr -d '\r' |
+    awk -F, '$2 != 1 { found=1 } END { exit !found }'
+}
+
+has_attached_picture() {
+    input=$1
+
+    ffprobe \
+        -v error \
+        -select_streams v \
+        -show_entries stream=index:stream_disposition=attached_pic \
+        -of csv=p=0 \
+        "$input" 2>/dev/null |
+    tr -d '\r' |
+    awk -F, '$2 == 1 { found=1 } END { exit !found }'
 }
 
 clip_can_stream_copy() {
@@ -1413,6 +1433,10 @@ if [ "$clip_requested" = true ] && has_audio_stream "$input" && ! has_video_stre
 fi
 
 if [ "$audio_only_clip" = true ]; then
+    if has_attached_picture "$input"; then
+        info "warning: embedded cover art will be dropped"
+    fi
+
     if [ "$copy_stream" = true ]; then
         error "--copy-stream is not supported for audio-only clipping"
         exit 2
