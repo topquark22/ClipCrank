@@ -144,6 +144,12 @@ has_audio_stream() {
     [ -n "$(probe_value "$input" stream=index a:0)" ]
 }
 
+has_video_stream() {
+    input=$1
+
+    [ -n "$(probe_value "$input" stream=index v:0)" ]
+}
+
 clip_can_stream_copy() {
     input=$1
 
@@ -1059,6 +1065,40 @@ run_extract_audio() {
         "$tmp_output"
 }
 
+run_trim_audio() {
+    encoder=$1
+    input=$2
+    tmp_output=$3
+
+    seek_args=()
+    if [ -n "$clip_start_seconds" ]; then
+        seek_args=( -ss "$clip_start_seconds" )
+    fi
+
+    duration_args=()
+    if [ -n "$clip_duration" ]; then
+        duration_args=( -t "$clip_duration" )
+    elif [ -n "$clip_end" ]; then
+        duration_args=( -t "$(timestamp_to_seconds "$clip_end")" )
+    fi
+
+    ffmpeg \
+        -hide_banner \
+        -loglevel error \
+        -y \
+        "${seek_args[@]}" \
+        -i "$input" \
+        "${duration_args[@]}" \
+        -map 0:a:0 \
+        -vn \
+        -dn \
+        -sn \
+        -c:a "$encoder" \
+        -b:a 192k \
+        -f mp3 \
+        "$tmp_output"
+}
+
 run_remove_audio() {
     encoder=$1
     input=$2
@@ -1365,6 +1405,85 @@ fi
 
 if [ "$clip_requested" = true ]; then
     validate_clip_bounds "$input"
+fi
+
+audio_only_clip=false
+if [ "$clip_requested" = true ] && has_audio_stream "$input" && ! has_video_stream "$input"; then
+    audio_only_clip=true
+fi
+
+if [ "$audio_only_clip" = true ]; then
+    if [ "$copy_stream" = true ]; then
+        error "--copy-stream is not supported for audio-only clipping"
+        exit 2
+    fi
+
+    if [ "$reencode" = true ] || [ -n "$fps" ] || [ "$cfr" = true ] || [ "$preserve_metadata" = true ] || [ "$clear_metadata" = true ] || [ "${#metadata_args[@]}" -gt 0 ]; then
+        error "audio-only clipping cannot be combined with video or metadata options"
+        exit 2
+    fi
+
+    if [ -z "$requested_output" ]; then
+        derived_output=$(derive_audio_output_path "$input")
+        if [ "$derived_output" = "$input" ]; then
+            error "audio-only clipping requires an explicit output file when input is already .mp3"
+            exit 2
+        fi
+        output=$derived_output
+    else
+        output=$requested_output
+    fi
+
+    case "$output" in
+        *.mp3) ;;
+        *)
+            error "audio output must use .mp3"
+            exit 2
+            ;;
+    esac
+
+    if [ "$input" = "$output" ]; then
+        error "input and output paths must be different"
+        exit 1
+    fi
+
+    if [ "$force" = false ] && [ -e "$output" ]; then
+        error "output file already exists: $output"
+        exit 1
+    fi
+
+    if ! audio_encoder=$(select_mp3_encoder); then
+        error "no supported MP3 encoder found in ffmpeg"
+        error "tried: libmp3lame, libshine, mp3_mf"
+        exit 1
+    fi
+
+    tmp_output="${output%.mp3}.part.mp3"
+
+    info "using audio encoder: $audio_encoder"
+    if [ -n "$clip_start" ] && [ -n "$clip_end" ]; then
+        info "trimming audio from $clip_start to $clip_end"
+    elif [ -n "$clip_start" ]; then
+        info "trimming audio from $clip_start to end of input"
+    else
+        info "trimming audio from start of input to $clip_end"
+    fi
+
+    cleanup() {
+        [ ! -e "$tmp_output" ] || rm -f "$tmp_output"
+    }
+
+    trap cleanup EXIT INT TERM HUP
+
+    if ! run_trim_audio "$audio_encoder" "$input" "$tmp_output"; then
+        error "audio trimming failed"
+        exit 1
+    fi
+
+    mv -f -- "$tmp_output" "$output"
+    trap - EXIT INT TERM HUP
+    printf 'created: %s\n' "$output"
+    exit 0
 fi
 
 if [ "$copy_stream" = true ]; then
