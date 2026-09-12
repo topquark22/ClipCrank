@@ -33,7 +33,7 @@ The planned `--info` operation shall provide concise technical media information
 
 Only one operation may be selected per invocation.
 
-`--start` or `--end` without another operation shall select clip creation and shall re-encode the clip to standardized H.264/AAC MP4 by default.
+`--start` or `--end` without another operation shall select clip creation. Video input shall re-encode to standardized H.264/AAC MP4 by default. Audio-only input shall be trimmed and encoded as MP3.
 
 `--copy-stream` shall be available as an explicit clipping option to request stream copying instead of re-encoding.
 
@@ -71,7 +71,9 @@ For video re-encoding, when no explicit output path is given, the script shall:
 - replace the input file extension with `.mp4`, if an extension exists,
 - otherwise append `.mp4` to the input path.
 
-For stream-copy clipping, the same derived `.mp4` output naming rule shall apply when no explicit output path is given.
+For stream-copy video clipping, the same derived `.mp4` output naming rule shall apply when no explicit output path is given.
+
+For audio-only clipping, output shall use the `.mp3` extension. If deriving the default `.mp3` output path would produce the same path as the input, an explicit output path shall be required.
 
 For `--add-audio` with video input, the default output path shall be derived from the video input path.
 
@@ -235,9 +237,13 @@ The script shall support `--cfr` to force constant-frame-rate output while allow
 
 Frame-rate options shall not be accepted with frame-capture operations.
 
-### 12. Video Clipping
+### 12. Media Clipping
 
-The script shall support `--start TIME` and `--end TIME`. Clipping shall re-encode to standardized H.264/AAC MP4 by default. The explicit `--reencode` form shall remain valid but shall not be required.
+The script shall support `--start TIME` and `--end TIME` for both video and audio-only input.
+
+For video input, clipping shall re-encode to standardized H.264/AAC MP4 by default. The explicit `--reencode` form shall remain valid but shall not be required.
+
+For audio-only input, clipping shall encode the selected audio range as MP3 using the normal MP3 encoder-selection behavior. Video output shall not be created for audio-only input.
 
 Accepted timestamps shall use:
 
@@ -255,7 +261,19 @@ The script shall:
 - reject invalid minute or second fields,
 - reject clipping options when frame capture is selected.
 
-The script shall support `--copy-stream` only in combination with `--start` or `--end`.
+For audio-only clipping:
+
+- the input shall contain at least one audio stream and no video stream,
+- the first audio stream shall be used,
+- output shall be encoded as MP3,
+- `--start` shall trim audio before the requested timestamp,
+- `--end` shall trim audio after the requested timestamp,
+- when both are supplied, only the requested interval shall be retained,
+- the same timestamp syntax and bounds validation used for video clipping shall apply,
+- clipping timestamps shall be interpreted against the input media duration,
+- an explicit output path shall be required when the default `.mp3` path would be identical to the input path.
+
+The script shall support `--copy-stream` only for video clipping and only in combination with `--start` or `--end`.
 
 `--copy-stream` shall not be accepted with `--reencode` or another primary operation.
 
@@ -278,7 +296,9 @@ No confirmation prompt shall be used for keyframe adjustment because stream copy
 
 Stream-copy clipping is constrained by existing keyframes and is not required to be frame-exact at the requested start timestamp. Default clipping remains available when exact transcoded clipping or codec normalization is required.
 
-Clip timestamps are not required to be incorporated automatically into the default video output filename.
+Clip timestamps are not required to be incorporated automatically into the default output filename.
+
+Audio-only clipping shall preserve the normal overwrite protection and temporary-output behavior used by other output-producing operations.
 
 ### 13. JPEG Frame Capture
 
@@ -435,7 +455,7 @@ When `--image IMAGE` is supplied, the script shall use the supplied still image 
 
 Within `--add-thumbnail`, `--frame` shall act as a modifier of the thumbnail operation rather than as the standalone JPEG frame-capture operation.
 
-`--frame` and `--image` shall not be accepted together.
+`--frame` and `--image` shall not be accepted together with `--add-thumbnail`.
 
 Thumbnail frame timestamps shall use the existing `[[h:]m:]s[.ms]` syntax and shall be validated against the input duration. A timestamp at or beyond the end of the video shall be rejected.
 
@@ -534,6 +554,16 @@ At minimum, testing should cover:
 
 - operation-selection validation,
 - standalone clip operation selection with `--start` or `--end`,
+- audio-only clipping with `--start`,
+- audio-only clipping with `--end`,
+- audio-only clipping with both `--start` and `--end`,
+- MP3 output verification for audio-only clipping,
+- duration verification of audio-only clipping with `ffprobe`,
+- millisecond timestamp handling for audio-only clipping,
+- rejection of audio-only clipping timestamps beyond the input duration,
+- explicit-output requirement when trimming an MP3 input would otherwise overwrite itself,
+- normal overwrite and `--force` behavior for audio-only clipping,
+- rejection of `--copy-stream` for audio-only clipping,
 - default re-encoding of clips without requiring `--reencode`,
 - H.264 verification of default clip output from non-H.264 input,
 - `--copy-stream` requirement for a clip boundary,
