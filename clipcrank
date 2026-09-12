@@ -78,7 +78,7 @@ Frame capture:
 Metadata and information:
   --info                     Display technical media information and exit
   --show-metadata            Display stored metadata tags and exit
-  --metadata KEY=VALUE       Set an MP4 metadata field; may be repeated
+  --metadata KEY=VALUE       Set a metadata field; may be repeated
   --title TEXT               Set title metadata
   --artist TEXT              Set artist metadata
   --album TEXT               Set album metadata
@@ -103,6 +103,7 @@ Examples:
   $progname --copy-stream --start 10 --end 20 input.mp4 clip.mp4
   $progname --add-audio image.png audio.wav output.mp4
   $progname --extract-audio input.mp4 output.mp3
+  $progname --title "Song Title" --artist "Artist" input.mp3 output.mp3
   $progname --remove-audio input.mp4 output.mp4
   $progname --frame 12.5 input.mp4 frame.jpg
   $progname --add-thumbnail input.mp4 output.mp4
@@ -1126,6 +1127,28 @@ run_trim_audio() {
         "$tmp_output"
 }
 
+run_update_mp3_metadata() {
+    input=$1
+    tmp_output=$2
+
+    metadata_mode_args=( -map_metadata 0 )
+    if [ "$clear_metadata" = true ]; then
+        metadata_mode_args=( -map_metadata -1 )
+    fi
+
+    ffmpeg \
+        -hide_banner \
+        -loglevel error \
+        -y \
+        -i "$input" \
+        -map 0 \
+        -c copy \
+        "${metadata_mode_args[@]}" \
+        "${metadata_args[@]}" \
+        -f mp3 \
+        "$tmp_output"
+}
+
 run_remove_audio() {
     encoder=$1
     input=$2
@@ -1286,6 +1309,14 @@ if [ -n "$clip_start" ] || [ -n "$clip_end" ]; then
     clip_requested=true
 fi
 
+standalone_metadata=false
+if [ "$operation_count" -eq 0 ] && [ "$clip_requested" = false ]; then
+    if [ "$clear_metadata" = true ] || [ "${#metadata_args[@]}" -gt 0 ]; then
+        standalone_metadata=true
+        operation_count=1
+    fi
+fi
+
 if [ "$copy_stream" = true ] && [ "$clip_requested" = false ]; then
     error "--copy-stream requires --start or --end"
     exit 2
@@ -1428,6 +1459,69 @@ fi
 if [ ! -r "$input" ]; then
     error "input file is not readable: $input"
     exit 1
+fi
+
+if [ "$standalone_metadata" = true ]; then
+    if ! have_command ffprobe; then
+        error "ffprobe is not installed or not on PATH"
+        exit 127
+    fi
+
+    if ! has_audio_stream "$input" || has_video_stream "$input"; then
+        error "standalone metadata updates currently require audio-only MP3 input"
+        exit 2
+    fi
+
+    case "$input" in
+        *.mp3) ;;
+        *)
+            error "standalone metadata updates currently require .mp3 input"
+            exit 2
+            ;;
+    esac
+
+    if [ -z "$requested_output" ]; then
+        error "MP3 metadata updates require an explicit output file"
+        exit 2
+    fi
+
+    output=$requested_output
+
+    case "$output" in
+        *.mp3) ;;
+        *)
+            error "MP3 metadata output must use .mp3"
+            exit 2
+            ;;
+    esac
+
+    if [ "$input" = "$output" ]; then
+        error "input and output paths must be different"
+        exit 1
+    fi
+
+    if [ "$force" = false ] && [ -e "$output" ]; then
+        error "output file already exists: $output"
+        exit 1
+    fi
+
+    tmp_output="${output%.mp3}.part.mp3"
+
+    cleanup() {
+        [ ! -e "$tmp_output" ] || rm -f "$tmp_output"
+    }
+
+    trap cleanup EXIT INT TERM HUP
+
+    if ! run_update_mp3_metadata "$input" "$tmp_output"; then
+        error "MP3 metadata update failed"
+        exit 1
+    fi
+
+    mv -f -- "$tmp_output" "$output"
+    trap - EXIT INT TERM HUP
+    printf 'created: %s\n' "$output"
+    exit 0
 fi
 
 if [ "$clip_requested" = true ]; then
