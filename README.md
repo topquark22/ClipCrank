@@ -2,14 +2,15 @@
 
 `clipcrank` is a command-line utility for video manipulation. The code is `bash` shell script, to run in a POSIX-compatible environment.
 
-`clipcrank` can convert (re-encode) many kinds of video files into standardized MP4 output using `ffmpeg`. It can also create clips based on starting and/or ending timestamps, capture one or more JPEG still frames from a video, add or replace audio using either a video or still image as the visual source, extract audio to MP3, remove audio from video, add or replace an embedded video thumbnail, and change media containers without re-encoding.
+`clipcrank` can convert (re-encode) many kinds of video files into standardized MP4 output using `ffmpeg`. It can also create video or audio clips based on starting and/or ending timestamps, capture one or more JPEG still frames from a video, add or replace audio using either a video or still image as the visual source, extract audio to MP3, remove audio from video, add or replace an embedded video thumbnail, and change media containers without re-encoding.
 
 `clipcrank` is a wrapper for `ffmpeg`, intended to simplify the invocation of common `ffmpeg` operations and provide a more intuitive command-line interface. It does not replace `ffmpeg`; instead, it handles the underlying invocation and options for common video conversion, clipping, frame-capture, metadata, audio, and remuxing tasks.
 
 ## Features
 
 - Converts (re-encodes) video to H.264/AAC MP4
-- Creates clips using optional start/end times, re-encoding to H.264/AAC by default
+- Creates video clips using optional start/end times, re-encoding to H.264/AAC by default
+- Trims audio-only input using optional start/end times and encodes the result as MP3
 - Captures single or multiple JPEG frames
 - Adds or replaces audio on video input
 - Creates H.264/AAC MP4 video from a still image plus audio
@@ -77,7 +78,7 @@ Actual codec support can vary between `ffmpeg` builds, so a recognized container
 ./clipcrank [OPTIONS] INPUT [OUTPUT]
 ```
 
-An operation must be selected explicitly, except that `--start` or `--end` may directly select clip creation. Clip creation re-encodes to H.264/AAC by default. Otherwise, if no operation is specified, `clipcrank` prints its usage message and exits without processing the input.
+An operation must be selected explicitly, except that `--start` or `--end` may directly select clip creation. Video clip creation re-encodes to H.264/AAC by default. Audio-only clip creation encodes the selected range as MP3. Otherwise, if no operation is specified, `clipcrank` prints its usage message and exits without processing the input.
 
 The available operations currently are:
 
@@ -110,7 +111,7 @@ Use `--add-audio` with a video input to add or replace its audio track:
 ./clipcrank --add-audio input.mp4 soundtrack.wav output.mp4
 ```
 
-The replacement audio may use any format that the installed `ffmpeg` can decode. Output is standardized H.264/AAC MP4.
+The replacement audio may use any format that the installed `ffmpeg` can decode. Output is standardized H.264/AAC MP4. With video input, the output retains the duration of the video: replacement audio that is longer than the video is trimmed at the video end, while shorter replacement audio is padded with silence to the video end.
 
 `--add-audio` also accepts a still image as the visual input:
 
@@ -235,7 +236,7 @@ Use `--show-metadata` to display the metadata already stored in the input file w
 
 This displays container-level and stream-level metadata using `ffprobe`, then exits. `--show-metadata` is an inspection mode and cannot be combined with output or conversion options.
 
-## Video Clips
+## Media Clips
 
 Use `--start TIME`, `--end TIME`, or both. Times use:
 
@@ -243,7 +244,7 @@ Use `--start TIME`, `--end TIME`, or both. Times use:
 [[h:]m:]s[.ms]
 ```
 
-ClipCrank re-encodes clips to standardized H.264/AAC MP4 by default:
+For video input, ClipCrank re-encodes clips to standardized H.264/AAC MP4 by default:
 
 ```sh
 ./clipcrank --start 12.500 input.mov clip.mp4
@@ -251,7 +252,21 @@ ClipCrank re-encodes clips to standardized H.264/AAC MP4 by default:
 ./clipcrank --start 1:12.500 --end 2:05 input.mov clip.mp4
 ```
 
-The explicit `--reencode` form remains valid but is not required for clipping:
+For audio-only input, the same `--start` and `--end` options trim the first audio stream and encode the result as MP3:
+
+```sh
+./clipcrank --start 1:00 input.mp3 output.mp3
+./clipcrank --end 3:34 input.mp3 output.mp3
+./clipcrank --start 1:00 --end 3:34 input.mp3 output.mp3
+```
+
+Audio-only clipping uses the normal MP3 encoder selection. `--copy-stream` is not supported for audio-only clipping.
+
+If the input is already an MP3, an explicit output filename is required because the normal derived `.mp3` name would be identical to the input filename. Normal overwrite protection and `--force` behavior apply.
+
+An MP3 may contain embedded cover art that FFmpeg exposes as an attached-picture video stream. ClipCrank does not treat attached cover art as ordinary video when deciding whether an input is audio-only. Audio trimming proceeds normally, but the embedded cover art is dropped from the output and ClipCrank prints a warning.
+
+The explicit `--reencode` form remains valid but is not required for video clipping:
 
 ```sh
 ./clipcrank --reencode --start 12.500 --end 2:05 input.mov clip.mp4
@@ -273,7 +288,7 @@ Use the default clipping mode when an exact transcoded start or codec normalizat
 
 If `--start` is omitted, output begins at the start of the input. If `--end` is omitted, output continues to the end. When both are supplied, `--end` must be later than `--start`.
 
-Clip timestamps are not automatically included in the default output filename. If `OUTPUT` is omitted, the normal derived `.mp4` filename is used regardless of whether `--start`, `--end`, or both are specified. Specify `OUTPUT` explicitly if you want the clip boundaries reflected in the filename.
+Clip timestamps are not automatically included in the default output filename. For video input, if `OUTPUT` is omitted, the normal derived `.mp4` filename is used regardless of whether `--start`, `--end`, or both are specified. For audio-only input, the normal derived `.mp3` filename is used when it differs from the input path; an explicit output is required when it would be identical to the input. Specify `OUTPUT` explicitly if you want the clip boundaries reflected in the filename.
 
 ## JPEG Frame Capture
 
