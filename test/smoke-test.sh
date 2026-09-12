@@ -471,5 +471,80 @@ else
     fail "long replacement audio should be trimmed to video duration"
 fi
 
+
+metadata_source="tmp/metadata-source.mp3"
+metadata_tagged="tmp/metadata-tagged.mp3"
+metadata_cleared="tmp/metadata-cleared.mp3"
+metadata_existing="tmp/metadata-existing.mp3"
+metadata_cover="examples/with_image.mp3"
+metadata_cover_out="tmp/metadata-cover-out.mp3"
+
+rm -f \
+    "$metadata_source" \
+    "$metadata_tagged" \
+    "$metadata_cleared" \
+    "$metadata_existing" \
+    "$metadata_cover_out"
+
+ffmpeg -hide_banner -loglevel error -y \
+    -f lavfi -i sine=frequency=440:sample_rate=48000 -t 2 \
+    -c:a libmp3lame -b:a 192k \
+    -metadata title="Old Title" \
+    -metadata artist="Old Artist" \
+    -metadata album="Old Album" \
+    "$metadata_source"
+
+if "$target_script" --title "New Title" --artist "New Artist" --metadata genre=Test \
+   "$metadata_source" "$metadata_tagged" >/dev/null 2>&1 &&
+   [ "$(ffprobe -v error -show_entries format_tags=title -of default=noprint_wrappers=1:nokey=1 "$metadata_tagged" | tr -d '\r')" = "New Title" ] &&
+   [ "$(ffprobe -v error -show_entries format_tags=artist -of default=noprint_wrappers=1:nokey=1 "$metadata_tagged" | tr -d '\r')" = "New Artist" ] &&
+   [ "$(ffprobe -v error -show_entries format_tags=album -of default=noprint_wrappers=1:nokey=1 "$metadata_tagged" | tr -d '\r')" = "Old Album" ] &&
+   [ "$(ffprobe -v error -show_entries format_tags=genre -of default=noprint_wrappers=1:nokey=1 "$metadata_tagged" | tr -d '\r')" = "Test" ]; then
+    pass "MP3 metadata update should set tags and preserve unspecified tags"
+else
+    fail "MP3 metadata update should set tags and preserve unspecified tags"
+fi
+
+if "$target_script" --clear-metadata --title "Only Title" "$metadata_source" "$metadata_cleared" >/dev/null 2>&1 &&
+   [ "$(ffprobe -v error -show_entries format_tags=title -of default=noprint_wrappers=1:nokey=1 "$metadata_cleared" | tr -d '\r')" = "Only Title" ] &&
+   [ -z "$(ffprobe -v error -show_entries format_tags=artist -of default=noprint_wrappers=1:nokey=1 "$metadata_cleared" | tr -d '\r')" ] &&
+   [ -z "$(ffprobe -v error -show_entries format_tags=album -of default=noprint_wrappers=1:nokey=1 "$metadata_cleared" | tr -d '\r')" ]; then
+    pass "MP3 clear metadata should remove old tags before setting new tags"
+else
+    fail "MP3 clear metadata should remove old tags before setting new tags"
+fi
+
+input_audio_md5=$(ffmpeg -hide_banner -loglevel error -i "$metadata_source" -map 0:a:0 -c copy -f md5 - 2>/dev/null)
+output_audio_md5=$(ffmpeg -hide_banner -loglevel error -i "$metadata_tagged" -map 0:a:0 -c copy -f md5 - 2>/dev/null)
+if [ "$input_audio_md5" = "$output_audio_md5" ]; then
+    pass "MP3 metadata update should not re-encode audio"
+else
+    fail "MP3 metadata update should not re-encode audio"
+fi
+
+run_expect_failure_message "MP3 metadata update should require explicit output" "require an explicit output file" \
+    "$target_script" --title "No Output" "$metadata_source"
+
+cp -f "$metadata_source" "$metadata_existing"
+run_expect_failure_message "MP3 metadata update should protect existing output" "output file already exists" \
+    "$target_script" --title "Blocked" "$metadata_source" "$metadata_existing"
+
+if "$target_script" --force --title "Forced" "$metadata_source" "$metadata_existing" >/dev/null 2>&1 &&
+   [ "$(ffprobe -v error -show_entries format_tags=title -of default=noprint_wrappers=1:nokey=1 "$metadata_existing" | tr -d '\r')" = "Forced" ]; then
+    pass "MP3 metadata update should allow overwrite with --force"
+else
+    fail "MP3 metadata update should allow overwrite with --force"
+fi
+
+if [ -f "$metadata_cover" ] &&
+   [ "$(ffprobe -v error -select_streams v -show_entries stream_disposition=attached_pic -of csv=p=0 "$metadata_cover" | tr -d '\r' | grep -c '^1$')" -ge 1 ] &&
+   "$target_script" --title "With Cover" "$metadata_cover" "$metadata_cover_out" >/dev/null 2>&1 &&
+   [ "$(ffprobe -v error -select_streams v -show_entries stream_disposition=attached_pic -of csv=p=0 "$metadata_cover_out" | tr -d '\r' | grep -c '^1$')" -ge 1 ] &&
+   [ "$(ffprobe -v error -show_entries format_tags=title -of default=noprint_wrappers=1:nokey=1 "$metadata_cover_out" | tr -d '\r')" = "With Cover" ]; then
+    pass "MP3 metadata update should preserve embedded cover art"
+else
+    fail "MP3 metadata update should preserve embedded cover art"
+fi
+
 say; say "Summary:"; say "  Passed: $pass_count"; say "  Failed: $fail_count"
 if [ "$fail_count" -ne 0 ]; then exit 1; fi
