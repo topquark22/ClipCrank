@@ -20,7 +20,7 @@ Operations must normally be selected explicitly. `--start` or `--end` may select
 
 The script shall support the following operations:
 
-- `--reencode` to create standardized H.264/AAC MP4 output,
+- `--reencode` to create standardized H.264/AAC MP4 output from video input or standardized MP3 output from audio-only input,
 - `--add-audio` to add or replace audio using video or still-image visual input,
 - `--extract-audio` to extract the first audio stream as MP3,
 - `--remove-audio` to create H.264 MP4 output without an audio stream,
@@ -73,6 +73,14 @@ For video re-encoding, when no explicit output path is given, the script shall:
 - replace the input file extension with `.mp4`, if an extension exists,
 - otherwise append `.mp4` to the input path.
 
+For audio-only `--reencode`, when no explicit output path is given, the script shall:
+
+- replace the input file extension with `.mp3`, if an extension exists,
+- otherwise append `.mp3` to the input path,
+- require an explicit output path when the derived `.mp3` path would be identical to the input path.
+
+Explicit audio-only `--reencode` output paths shall use the `.mp3` extension.
+
 For stream-copy video clipping, the same derived `.mp4` output naming rule shall apply when no explicit output path is given.
 
 For audio-only clipping, output shall use the `.mp3` extension. If deriving the default `.mp3` output path would produce the same path as the input, an explicit output path shall be required.
@@ -117,10 +125,12 @@ With `--force`, an existing final output shall be replaced only after the new te
 
 ### 5. Re-encoding Behavior
 
-When `--reencode` is selected, or when clipping is requested without `--copy-stream`, the script shall invoke `ffmpeg` to:
+When `--reencode` is selected, the script shall classify the input as video or audio-only using `ffprobe`.
+
+For video input, or when video clipping is requested without `--copy-stream`, the script shall invoke `ffmpeg` to:
 
 - read the input media file,
-- include the first video stream,
+- include the first ordinary video stream,
 - include audio streams when audio exists,
 - tolerate missing audio streams,
 - omit subtitle streams,
@@ -128,6 +138,22 @@ When `--reencode` is selected, or when clipping is requested without `--copy-str
 - generate timestamps when needed,
 - write MP4 output,
 - move the completed temporary file into place only after successful conversion.
+
+For audio-only input, `--reencode` shall:
+
+- require at least one usable audio stream and no ordinary video stream,
+- treat attached-picture streams as cover art rather than ordinary video,
+- use the first audio stream,
+- omit subtitle and data streams,
+- encode the audio as MP3,
+- write `.mp3` output,
+- preserve descriptive metadata by default,
+- honor `--preserve-metadata`, `--clear-metadata`, and explicit metadata-editing options using the same precedence rules as other MP3-producing operations,
+- preserve embedded cover art when the target MP3 container and local FFmpeg build support it,
+- otherwise print a warning if embedded cover art must be dropped,
+- move the completed temporary file into place only after successful conversion.
+
+Audio-only `--reencode` shall accept any input audio format that the installed FFmpeg build can decode, including formats such as M4A, WAV, FLAC, Ogg Vorbis, and MP3. This requirement does not imply arbitrary output codec selection: audio-only `--reencode` output shall currently be MP3.
 
 ### 6. Video Encoding
 
@@ -163,7 +189,7 @@ The script shall verify that an AAC encoder is available in the local `ffmpeg` e
 
 The script shall fail with a clear error message if no AAC encoder is available.
 
-For `--extract-audio`, the script shall select an available MP3 encoder from supported local FFmpeg encoders and encode the extracted audio at 192 kb/s.
+For `--extract-audio`, audio-only clipping, and audio-only `--reencode`, the script shall select an available MP3 encoder from supported local FFmpeg encoders and encode MP3 output at 192 kb/s.
 
 The current MP3 encoder preference is:
 
@@ -393,9 +419,10 @@ Metadata-editing options shall also be accepted with:
 
 - `--extract-audio`,
 - audio-only clipping selected by `--start`, `--end`, or both,
+- audio-only `--reencode`,
 - existing MP4 re-encoding operations that already support metadata editing.
 
-For `--extract-audio` and audio-only clipping, metadata shall be written as part of the MP3-producing FFmpeg operation rather than by a second re-encoding pass.
+For `--extract-audio`, audio-only clipping, and audio-only `--reencode`, metadata shall be written as part of the MP3-producing FFmpeg operation rather than by a second re-encoding pass.
 
 Metadata options shall not be accepted with frame capture, `--remove-audio`, `--remux`, or `--copy-stream` clipping.
 
@@ -558,7 +585,7 @@ To support this, the script should:
 - use `yuv420p`,
 - use `+faststart`.
 
-Extracted audio should use MP3 for broad compatibility.
+Extracted and re-encoded audio-only output should use MP3 for broad compatibility.
 
 Audio-removed video should use H.264 MP4 without an audio stream.
 
@@ -576,7 +603,7 @@ The script does not currently aim to:
 - preserve data streams,
 - preserve chapter information,
 - provide configurable video quality settings,
-- provide configurable extracted-audio format,
+- provide configurable extracted-audio or audio-reencode output format,
 - provide batch conversion as a built-in operation,
 - provide recursive directory traversal,
 - provide a `--verbose` or `--quiet` mode,
@@ -616,6 +643,17 @@ At minimum, testing should cover:
 - reporting of the requested and usable keyframe start timestamps for `--copy-stream`,
 - successful VP9-to-H.264 conversion of the committed Big Buck Bunny sample video,
 - verification of the input and output video codecs with `ffprobe`,
+- successful audio-only `--reencode` from at least one non-MP3 source format to MP3,
+- audio-only `--reencode` from M4A to MP3,
+- MP3 codec verification of audio-only `--reencode` output with `ffprobe`,
+- default `.mp3` output naming for audio-only `--reencode`,
+- explicit-output requirement when audio-only `--reencode` of an MP3 would otherwise overwrite itself,
+- rejection of a non-`.mp3` output path for audio-only `--reencode`,
+- normal output-exists and `--force` behavior for audio-only `--reencode`,
+- preservation of descriptive metadata by default during audio-only `--reencode`,
+- `--clear-metadata` and explicit metadata override behavior during audio-only `--reencode`,
+- classification of audio-only input with embedded cover art as audio rather than video,
+- preservation of embedded cover art during audio-only `--reencode` where supported, or a warning if it must be dropped,
 - still-image plus audio creation using the committed Lenna and `bah.wav` fixtures,
 - video plus replacement-audio creation using the committed video and audio fixtures,
 - still-image detection that does not depend on a `.jpg` or `.png` filename extension,

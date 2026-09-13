@@ -608,5 +608,91 @@ else
     fail "audio trim should support clear metadata"
 fi
 
+
+audio_reencode_m4a="tmp/audio-reencode.m4a"
+audio_reencode_mp3="tmp/audio-reencode.mp3"
+audio_reencode_default_source="tmp/audio-reencode-default.m4a"
+audio_reencode_default_out="tmp/audio-reencode-default.mp3"
+audio_reencode_metadata="tmp/audio-reencode-metadata.mp3"
+audio_reencode_clear="tmp/audio-reencode-clear.mp3"
+audio_reencode_existing="tmp/audio-reencode-existing.mp3"
+audio_reencode_cover_out="tmp/audio-reencode-cover.mp3"
+
+rm -f \
+    "$audio_reencode_m4a" \
+    "$audio_reencode_mp3" \
+    "$audio_reencode_default_source" \
+    "$audio_reencode_default_out" \
+    "$audio_reencode_metadata" \
+    "$audio_reencode_clear" \
+    "$audio_reencode_existing" \
+    "$audio_reencode_cover_out"
+
+ffmpeg -hide_banner -loglevel error -y \
+    -f lavfi -i sine=frequency=523:sample_rate=48000 -t 3 \
+    -c:a aac -b:a 192k \
+    -metadata title="M4A Title" \
+    -metadata artist="M4A Artist" \
+    "$audio_reencode_m4a"
+
+if "$target_script" --reencode "$audio_reencode_m4a" "$audio_reencode_mp3" >/dev/null 2>&1 &&
+   [ -f "$audio_reencode_mp3" ] &&
+   [ "$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$audio_reencode_mp3" | tr -d '\r')" = "mp3" ]; then
+    pass "audio-only reencode should convert M4A to MP3"
+else
+    fail "audio-only reencode should convert M4A to MP3"
+fi
+
+cp -f "$audio_reencode_m4a" "$audio_reencode_default_source"
+if "$target_script" --reencode "$audio_reencode_default_source" >/dev/null 2>&1 &&
+   [ -f "$audio_reencode_default_out" ]; then
+    pass "audio-only reencode should derive default MP3 output"
+else
+    fail "audio-only reencode should derive default MP3 output"
+fi
+
+run_expect_failure_message "audio-only reencode should reject non-MP3 output" "output must use .mp3" \
+    "$target_script" --reencode "$audio_reencode_m4a" "tmp/audio-reencode.wav"
+
+run_expect_failure_message "audio-only MP3 reencode should require explicit output" "requires an explicit output file" \
+    "$target_script" --reencode "$metadata_source"
+
+if "$target_script" --reencode --title "Reencoded Title" "$audio_reencode_m4a" "$audio_reencode_metadata" >/dev/null 2>&1 &&
+   [ "$(ffprobe -v error -show_entries format_tags=title -of default=noprint_wrappers=1:nokey=1 "$audio_reencode_metadata" | tr -d '\r')" = "Reencoded Title" ] &&
+   [ "$(ffprobe -v error -show_entries format_tags=artist -of default=noprint_wrappers=1:nokey=1 "$audio_reencode_metadata" | tr -d '\r')" = "M4A Artist" ]; then
+    pass "audio-only reencode should preserve metadata and apply explicit metadata"
+else
+    fail "audio-only reencode should preserve metadata and apply explicit metadata"
+fi
+
+if "$target_script" --reencode --clear-metadata --title "Clean Reencode" "$audio_reencode_m4a" "$audio_reencode_clear" >/dev/null 2>&1 &&
+   [ "$(ffprobe -v error -show_entries format_tags=title -of default=noprint_wrappers=1:nokey=1 "$audio_reencode_clear" | tr -d '\r')" = "Clean Reencode" ] &&
+   [ -z "$(ffprobe -v error -show_entries format_tags=artist -of default=noprint_wrappers=1:nokey=1 "$audio_reencode_clear" | tr -d '\r')" ]; then
+    pass "audio-only reencode should support clear metadata"
+else
+    fail "audio-only reencode should support clear metadata"
+fi
+
+cp -f "$audio_reencode_mp3" "$audio_reencode_existing"
+run_expect_failure_message "audio-only reencode should protect existing output" "output file already exists" \
+    "$target_script" --reencode "$audio_reencode_m4a" "$audio_reencode_existing"
+
+if "$target_script" --force --reencode "$audio_reencode_m4a" "$audio_reencode_existing" >/dev/null 2>&1 &&
+   [ "$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$audio_reencode_existing" | tr -d '\r')" = "mp3" ]; then
+    pass "audio-only reencode should allow overwrite with --force"
+else
+    fail "audio-only reencode should allow overwrite with --force"
+fi
+
+if [ -f "examples/with_image.mp3" ] &&
+   [ "$(ffprobe -v error -select_streams v -show_entries stream_disposition=attached_pic -of csv=p=0 "examples/with_image.mp3" | tr -d '\r' | grep -c '^1$')" -ge 1 ] &&
+   "$target_script" --reencode "examples/with_image.mp3" "$audio_reencode_cover_out" >/dev/null 2>&1 &&
+   [ "$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$audio_reencode_cover_out" | tr -d '\r')" = "mp3" ] &&
+   [ "$(ffprobe -v error -select_streams v -show_entries stream_disposition=attached_pic -of csv=p=0 "$audio_reencode_cover_out" | tr -d '\r' | grep -c '^1$')" -ge 1 ]; then
+    pass "audio-only reencode should preserve embedded cover art"
+else
+    fail "audio-only reencode should preserve embedded cover art"
+fi
+
 say; say "Summary:"; say "  Passed: $pass_count"; say "  Failed: $fail_count"
 if [ "$fail_count" -ne 0 ]; then exit 1; fi

@@ -51,7 +51,7 @@ Usage:
   $progname --add-thumbnail [OPTIONS] INPUT OUTPUT
 
 Video re-encoding and clipping:
-  --reencode                 Re-encode to H.264/AAC MP4
+  --reencode                 Re-encode video to H.264/AAC MP4 or audio-only input to MP3
   --start TIME               Start clip at TIME
   --end TIME                 End clip at TIME
   --copy-stream              Copy H.264/AAC streams when clipping
@@ -99,6 +99,7 @@ Timestamp format:
 
 Examples:
   $progname --reencode input.avi output.mp4
+  $progname --reencode input.m4a output.mp3
   $progname --start 10 --end 20 input.mp4 clip.mp4
   $progname --copy-stream --start 10 --end 20 input.mp4 clip.mp4
   $progname --add-audio image.png audio.wav output.mp4
@@ -1141,6 +1142,42 @@ run_trim_audio() {
         "$tmp_output"
 }
 
+run_reencode_audio() {
+    encoder=$1
+    input=$2
+    tmp_output=$3
+    preserve_cover=$4
+
+    metadata_mode_args=( -map_metadata 0 )
+    if [ "$clear_metadata" = true ]; then
+        metadata_mode_args=( -map_metadata -1 )
+    fi
+
+    cover_map_args=()
+    cover_codec_args=()
+    if [ "$preserve_cover" = true ]; then
+        cover_map_args=( -map 0:v? )
+        cover_codec_args=( -c:v copy )
+    fi
+
+    ffmpeg \
+        -hide_banner \
+        -loglevel error \
+        -y \
+        -i "$input" \
+        -map 0:a:0 \
+        "${cover_map_args[@]}" \
+        -dn \
+        -sn \
+        "${metadata_mode_args[@]}" \
+        "${metadata_args[@]}" \
+        -c:a "$encoder" \
+        -b:a 192k \
+        "${cover_codec_args[@]}" \
+        -f mp3 \
+        "$tmp_output"
+}
+
 run_update_mp3_metadata() {
     input=$1
     tmp_output=$2
@@ -1473,6 +1510,88 @@ fi
 if [ ! -r "$input" ]; then
     error "input file is not readable: $input"
     exit 1
+fi
+
+audio_only_reencode=false
+if [ "$reencode" = true ] && [ "$clip_requested" = false ] && has_audio_stream "$input" && ! has_video_stream "$input"; then
+    audio_only_reencode=true
+fi
+
+if [ "$audio_only_reencode" = true ]; then
+    if [ -n "$fps" ] || [ "$cfr" = true ]; then
+        error "audio-only --reencode cannot be combined with frame-rate options"
+        exit 2
+    fi
+
+    if [ -z "$requested_output" ]; then
+        derived_output=$(derive_audio_output_path "$input")
+        if [ "$derived_output" = "$input" ]; then
+            error "audio-only --reencode requires an explicit output file when input is already .mp3"
+            exit 2
+        fi
+        output=$derived_output
+    else
+        output=$requested_output
+    fi
+
+    case "$output" in
+        *.mp3) ;;
+        *)
+            error "audio-only --reencode output must use .mp3"
+            exit 2
+            ;;
+    esac
+
+    if [ "$input" = "$output" ]; then
+        error "input and output paths must be different"
+        exit 1
+    fi
+
+    if [ "$force" = false ] && [ -e "$output" ]; then
+        error "output file already exists: $output"
+        exit 1
+    fi
+
+    if ! audio_encoder=$(select_mp3_encoder); then
+        error "no supported MP3 encoder found in ffmpeg"
+        error "tried: libmp3lame, libshine, mp3_mf"
+        exit 1
+    fi
+
+    tmp_output="${output%.mp3}.part.mp3"
+
+    cleanup() {
+        [ ! -e "$tmp_output" ] || rm -f "$tmp_output"
+    }
+
+    trap cleanup EXIT INT TERM HUP
+
+    info "using audio encoder: $audio_encoder"
+    info "re-encoding audio to MP3"
+
+    preserve_cover=false
+    if has_attached_picture "$input"; then
+        preserve_cover=true
+    fi
+
+    if ! run_reencode_audio "$audio_encoder" "$input" "$tmp_output" "$preserve_cover"; then
+        if [ "$preserve_cover" = true ]; then
+            rm -f -- "$tmp_output"
+            info "warning: embedded cover art could not be preserved and will be dropped"
+            if ! run_reencode_audio "$audio_encoder" "$input" "$tmp_output" false; then
+                error "audio re-encoding failed"
+                exit 1
+            fi
+        else
+            error "audio re-encoding failed"
+            exit 1
+        fi
+    fi
+
+    mv -f -- "$tmp_output" "$output"
+    trap - EXIT INT TERM HUP
+    printf 'created: %s\n' "$output"
+    exit 0
 fi
 
 if [ "$standalone_metadata" = true ]; then
