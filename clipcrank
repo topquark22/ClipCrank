@@ -1078,6 +1078,11 @@ run_extract_audio() {
     input=$2
     tmp_output=$3
 
+    metadata_mode_args=( -map_metadata 0 )
+    if [ "$clear_metadata" = true ]; then
+        metadata_mode_args=( -map_metadata -1 )
+    fi
+
     ffmpeg \
         -hide_banner \
         -loglevel error \
@@ -1087,6 +1092,8 @@ run_extract_audio() {
         -vn \
         -dn \
         -sn \
+        "${metadata_mode_args[@]}" \
+        "${metadata_args[@]}" \
         -c:a "$encoder" \
         -b:a 192k \
         -f mp3 \
@@ -1110,6 +1117,11 @@ run_trim_audio() {
         duration_args=( -t "$(timestamp_to_seconds "$clip_end")" )
     fi
 
+    metadata_mode_args=( -map_metadata 0 )
+    if [ "$clear_metadata" = true ]; then
+        metadata_mode_args=( -map_metadata -1 )
+    fi
+
     ffmpeg \
         -hide_banner \
         -loglevel error \
@@ -1121,6 +1133,8 @@ run_trim_audio() {
         -vn \
         -dn \
         -sn \
+        "${metadata_mode_args[@]}" \
+        "${metadata_args[@]}" \
         -c:a "$encoder" \
         -b:a 192k \
         -f mp3 \
@@ -1311,7 +1325,7 @@ fi
 
 standalone_metadata=false
 if [ "$operation_count" -eq 0 ] && [ "$clip_requested" = false ]; then
-    if [ "$clear_metadata" = true ] || [ "${#metadata_args[@]}" -gt 0 ]; then
+    if [ "$preserve_metadata" = true ] || [ "$clear_metadata" = true ] || [ "${#metadata_args[@]}" -gt 0 ]; then
         standalone_metadata=true
         operation_count=1
     fi
@@ -1543,8 +1557,8 @@ if [ "$audio_only_clip" = true ]; then
         exit 2
     fi
 
-    if [ "$reencode" = true ] || [ -n "$fps" ] || [ "$cfr" = true ] || [ "$preserve_metadata" = true ] || [ "$clear_metadata" = true ] || [ "${#metadata_args[@]}" -gt 0 ]; then
-        error "audio-only clipping cannot be combined with video or metadata options"
+    if [ "$reencode" = true ] || [ -n "$fps" ] || [ "$cfr" = true ]; then
+        error "audio-only clipping cannot be combined with video options"
         exit 2
     fi
 
@@ -1838,8 +1852,8 @@ if [ "$remux" = true ]; then
 fi
 
 if [ "$extract_audio" = true ]; then
-    if [ -n "$clip_start" ] || [ -n "$clip_end" ] || [ -n "$fps" ] || [ "$cfr" = true ] || [ "$preserve_metadata" = true ] || [ "$clear_metadata" = true ] || [ "${#metadata_args[@]}" -gt 0 ]; then
-        error "--extract-audio cannot be combined with video or metadata options"
+    if [ -n "$clip_start" ] || [ -n "$clip_end" ] || [ -n "$fps" ] || [ "$cfr" = true ]; then
+        error "--extract-audio cannot be combined with clipping or frame-rate options"
         exit 2
     fi
 

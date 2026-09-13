@@ -475,19 +475,31 @@ fi
 metadata_source="tmp/metadata-source.mp3"
 metadata_tagged="tmp/metadata-tagged.mp3"
 metadata_cleared="tmp/metadata-cleared.mp3"
+metadata_preserved="tmp/metadata-preserved.mp3"
 metadata_existing="tmp/metadata-existing.mp3"
 metadata_cover="examples/with_image.mp3"
 metadata_cover_out="tmp/metadata-cover-out.mp3"
+metadata_extract_source="tmp/metadata-extract-source.mp4"
+metadata_extract_out="tmp/metadata-extract-out.mp3"
+metadata_extract_clear="tmp/metadata-extract-clear.mp3"
+metadata_trim_out="tmp/metadata-trim-out.mp3"
+metadata_trim_clear="tmp/metadata-trim-clear.mp3"
 
 rm -f \
     "$metadata_source" \
     "$metadata_tagged" \
     "$metadata_cleared" \
+    "$metadata_preserved" \
     "$metadata_existing" \
-    "$metadata_cover_out"
+    "$metadata_cover_out" \
+    "$metadata_extract_source" \
+    "$metadata_extract_out" \
+    "$metadata_extract_clear" \
+    "$metadata_trim_out" \
+    "$metadata_trim_clear"
 
 ffmpeg -hide_banner -loglevel error -y \
-    -f lavfi -i sine=frequency=440:sample_rate=48000 -t 2 \
+    -f lavfi -i sine=frequency=440:sample_rate=48000 -t 4 \
     -c:a libmp3lame -b:a 192k \
     -metadata title="Old Title" \
     -metadata artist="Old Artist" \
@@ -512,6 +524,14 @@ if "$target_script" --clear-metadata --title "Only Title" "$metadata_source" "$m
     pass "MP3 clear metadata should remove old tags before setting new tags"
 else
     fail "MP3 clear metadata should remove old tags before setting new tags"
+fi
+
+if "$target_script" --preserve-metadata "$metadata_source" "$metadata_preserved" >/dev/null 2>&1 &&
+   [ "$(ffprobe -v error -show_entries format_tags=title -of default=noprint_wrappers=1:nokey=1 "$metadata_preserved" | tr -d '\r')" = "Old Title" ] &&
+   [ "$(ffprobe -v error -show_entries format_tags=artist -of default=noprint_wrappers=1:nokey=1 "$metadata_preserved" | tr -d '\r')" = "Old Artist" ]; then
+    pass "MP3 preserve metadata should work as a standalone operation"
+else
+    fail "MP3 preserve metadata should work as a standalone operation"
 fi
 
 input_audio_md5=$(ffmpeg -hide_banner -loglevel error -i "$metadata_source" -map 0:a:0 -c copy -f md5 - 2>/dev/null)
@@ -544,6 +564,48 @@ if [ -f "$metadata_cover" ] &&
     pass "MP3 metadata update should preserve embedded cover art"
 else
     fail "MP3 metadata update should preserve embedded cover art"
+fi
+
+ffmpeg -hide_banner -loglevel error -y \
+    -i "$created_video" \
+    -map 0 \
+    -c copy \
+    -metadata title="Video Title" \
+    -metadata artist="Video Artist" \
+    "$metadata_extract_source"
+
+if "$target_script" --extract-audio --title "Extracted Title" "$metadata_extract_source" "$metadata_extract_out" >/dev/null 2>&1 &&
+   [ "$(ffprobe -v error -show_entries format_tags=title -of default=noprint_wrappers=1:nokey=1 "$metadata_extract_out" | tr -d '\r')" = "Extracted Title" ] &&
+   [ "$(ffprobe -v error -show_entries format_tags=artist -of default=noprint_wrappers=1:nokey=1 "$metadata_extract_out" | tr -d '\r')" = "Video Artist" ]; then
+    pass "extract audio should preserve metadata and apply explicit metadata"
+else
+    fail "extract audio should preserve metadata and apply explicit metadata"
+fi
+
+if "$target_script" --extract-audio --clear-metadata --title "Clean Extract" "$metadata_extract_source" "$metadata_extract_clear" >/dev/null 2>&1 &&
+   [ "$(ffprobe -v error -show_entries format_tags=title -of default=noprint_wrappers=1:nokey=1 "$metadata_extract_clear" | tr -d '\r')" = "Clean Extract" ] &&
+   [ -z "$(ffprobe -v error -show_entries format_tags=artist -of default=noprint_wrappers=1:nokey=1 "$metadata_extract_clear" | tr -d '\r')" ]; then
+    pass "extract audio should support clear metadata"
+else
+    fail "extract audio should support clear metadata"
+fi
+
+if "$target_script" --end 2 --title "Trimmed Title" "$metadata_source" "$metadata_trim_out" >/dev/null 2>&1 &&
+   [ "$(ffprobe -v error -show_entries format_tags=title -of default=noprint_wrappers=1:nokey=1 "$metadata_trim_out" | tr -d '\r')" = "Trimmed Title" ] &&
+   [ "$(ffprobe -v error -show_entries format_tags=artist -of default=noprint_wrappers=1:nokey=1 "$metadata_trim_out" | tr -d '\r')" = "Old Artist" ] &&
+   [ "$(ffprobe -v error -show_entries format_tags=album -of default=noprint_wrappers=1:nokey=1 "$metadata_trim_out" | tr -d '\r')" = "Old Album" ]; then
+    pass "audio trim should preserve metadata and apply explicit metadata"
+else
+    fail "audio trim should preserve metadata and apply explicit metadata"
+fi
+
+if "$target_script" --end 2 --clear-metadata --title "Clean Trim" "$metadata_source" "$metadata_trim_clear" >/dev/null 2>&1 &&
+   [ "$(ffprobe -v error -show_entries format_tags=title -of default=noprint_wrappers=1:nokey=1 "$metadata_trim_clear" | tr -d '\r')" = "Clean Trim" ] &&
+   [ -z "$(ffprobe -v error -show_entries format_tags=artist -of default=noprint_wrappers=1:nokey=1 "$metadata_trim_clear" | tr -d '\r')" ] &&
+   [ -z "$(ffprobe -v error -show_entries format_tags=album -of default=noprint_wrappers=1:nokey=1 "$metadata_trim_clear" | tr -d '\r')" ]; then
+    pass "audio trim should support clear metadata"
+else
+    fail "audio trim should support clear metadata"
 fi
 
 say; say "Summary:"; say "  Passed: $pass_count"; say "  Failed: $fail_count"
