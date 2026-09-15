@@ -263,8 +263,10 @@ For audio-only input, the same `--start` and `--end` options trim the first audi
 Audio-only clipping uses the normal MP3 encoder selection. `--copy-stream` is not supported for audio-only clipping.
 
 If the input is already an MP3, an explicit output filename is required because the normal derived `.mp3` name would be identical to the input filename. Normal overwrite protection and `--force` behavior apply.
-
-An MP3 may contain embedded cover art that FFmpeg exposes as an attached-picture video stream. ClipCrank does not treat attached cover art as ordinary video when deciding whether an input is audio-only. Audio trimming proceeds normally, but the embedded cover art is dropped from the output and ClipCrank prints a warning.
+--- a/README.md
++++ b/README.md
+@@
+An MP3 may contain embedded cover art that FFmpeg exposes as an attached-picture video stream. ClipCrank does not treat attached cover art as ordinary video when deciding whether an input is audio-only. When trimming audio, existing embedded cover art is preserved in the output.
 
 The explicit `--reencode` form remains valid but is not required for video clipping:
 

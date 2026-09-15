@@ -1123,6 +1123,27 @@ run_trim_audio() {
         metadata_mode_args=( -map_metadata -1 )
     fi
 
+    cover_art_args=( -vn )
+    if has_attached_picture "$input"; then
+        cover_art_args=(
+            -map 0:v:0
+            -c:v copy
+            -disposition:v:0 attached_pic
+            -id3v2_version 3
+        )
+
+        cover_title=$(probe_value "$input" stream_tags=title v:0)
+        cover_comment=$(probe_value "$input" stream_tags=comment v:0)
+
+        if [ -n "$cover_title" ]; then
+            cover_art_args+=( -metadata:s:v:0 "title=$cover_title" )
+        fi
+
+        if [ -n "$cover_comment" ]; then
+            cover_art_args+=( -metadata:s:v:0 "comment=$cover_comment" )
+        fi
+    fi
+
     ffmpeg \
         -hide_banner \
         -loglevel error \
@@ -1131,7 +1152,7 @@ run_trim_audio() {
         -i "$input" \
         "${duration_args[@]}" \
         -map 0:a:0 \
-        -vn \
+        "${cover_art_args[@]}" \
         -dn \
         -sn \
         "${metadata_mode_args[@]}" \
@@ -1667,10 +1688,6 @@ if [ "$clip_requested" = true ] && has_audio_stream "$input" && ! has_video_stre
 fi
 
 if [ "$audio_only_clip" = true ]; then
-    if has_attached_picture "$input"; then
-        info "warning: embedded cover art will be dropped"
-    fi
-
     if [ "$copy_stream" = true ]; then
         error "--copy-stream is not supported for audio-only clipping"
         exit 2

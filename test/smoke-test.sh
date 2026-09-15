@@ -377,14 +377,15 @@ ffmpeg -hide_banner -loglevel error -y \
     -metadata:s:v comment="Cover (front)" \
     "$audio_with_cover"
 
-if output=$("$target_script" --force --end 2 "$audio_with_cover" "$audio_with_cover_trimmed" 2>&1) &&
+if "$target_script" --force --end 2 "$audio_with_cover" "$audio_with_cover_trimmed" >/dev/null 2>&1 &&
    [ -f "$audio_with_cover_trimmed" ] &&
-   case "$output" in *"warning: embedded cover art will be dropped"*) true ;; *) false ;; esac &&
    [ "$(ffprobe -v error -select_streams a:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$audio_with_cover_trimmed" | tr -d '\r')" = "mp3" ] &&
-   [ -z "$(ffprobe -v error -select_streams v -show_entries stream=index -of default=noprint_wrappers=1:nokey=1 "$audio_with_cover_trimmed" | tr -d '\r')" ]; then
-    pass "audio-only clipping should drop embedded cover art with warning"
+   [ "$(ffprobe -v error -select_streams v:0 -show_entries stream_disposition=attached_pic -of default=noprint_wrappers=1:nokey=1 "$audio_with_cover_trimmed" | tr -d '\r')" = "1" ] &&
+   [ "$(ffprobe -v error -select_streams v:0 -show_entries stream_tags=title -of default=noprint_wrappers=1:nokey=1 "$audio_with_cover_trimmed" | tr -d '\r')" = "Album cover" ] &&
+   [ "$(ffprobe -v error -select_streams v:0 -show_entries stream_tags=comment -of default=noprint_wrappers=1:nokey=1 "$audio_with_cover_trimmed" | tr -d '\r')" = "Cover (front)" ]; then
+    pass "audio-only clipping should preserve embedded cover art and metadata"
 else
-    fail "audio-only clipping should drop embedded cover art with warning"
+    fail "audio-only clipping should preserve embedded cover art and metadata"
 fi
 
 silent_video="tmp/bah-silent.mp4"
