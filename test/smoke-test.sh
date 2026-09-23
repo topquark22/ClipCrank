@@ -241,6 +241,25 @@ if [ -f "$thumbnail_default" ] &&
 else
     fail "add thumbnail should preserve H.264 and AAC codecs"
 fi
+
+thumbnail_clip="tmp/bah-thumbnail-clip.mp4"
+thumbnail_copy_clip="tmp/bah-thumbnail-copy-clip.mp4"
+
+if "$target_script" --force --start 1 --end 3 "$thumbnail_default" "$thumbnail_clip" >/dev/null 2>&1 &&
+   [ -f "$thumbnail_clip" ] &&
+   [ "$(ffprobe -v error -select_streams v -show_entries stream_disposition=attached_pic -of csv=p=0 "$thumbnail_clip" | tr -d '\r' | grep -c '^1$')" -eq 1 ]; then
+    pass "video clipping should preserve attached thumbnail"
+else
+    fail "video clipping should preserve attached thumbnail"
+fi
+
+if "$target_script" --force --copy-stream --start 1 --end 3 "$thumbnail_default" "$thumbnail_copy_clip" >/dev/null 2>&1 &&
+   [ -f "$thumbnail_copy_clip" ] &&
+   [ "$(ffprobe -v error -select_streams v -show_entries stream_disposition=attached_pic -of csv=p=0 "$thumbnail_copy_clip" | tr -d '\r' | grep -c '^1$')" -eq 1 ]; then
+    pass "stream-copy clipping should preserve attached thumbnail"
+else
+    fail "stream-copy clipping should preserve attached thumbnail"
+fi
 if "$target_script" --force --add-thumbnail --frame 1 "$created_video" "$thumbnail_frame" >/dev/null 2>&1 && [ -f "$thumbnail_frame" ]; then
     pass "add thumbnail should accept explicit frame timestamp"
 else
