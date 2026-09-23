@@ -953,6 +953,17 @@ EOF
         duration_args=( -t "$clip_duration" )
     fi
 
+    thumbnail_map_args=()
+    thumbnail_codec_args=()
+    thumbnail_video_index=1
+    while IFS= read -r stream_index; do
+        if [ -n "$stream_index" ]; then
+            thumbnail_map_args+=( -map "0:$stream_index" )
+            thumbnail_codec_args+=( -c:v:"$thumbnail_video_index" copy -disposition:v:"$thumbnail_video_index" attached_pic )
+            thumbnail_video_index=$((thumbnail_video_index + 1))
+        fi
+    done < <(attached_thumbnail_indexes "$input")
+
     ffmpeg \
         -hide_banner \
         -loglevel error \
@@ -963,14 +974,16 @@ EOF
         "${duration_args[@]}" \
         -map 0:v:0 \
         -map 0:a? \
+        "${thumbnail_map_args[@]}" \
         -dn \
         -sn \
         "${cfr_args[@]}" \
         "${metadata_mode_args[@]}" \
         "${metadata_args[@]}" \
         "${encoder_args[@]}" \
-        -pix_fmt yuv420p \
-        -vf "$(build_video_filters)" \
+        "${thumbnail_codec_args[@]}" \
+        -pix_fmt:v:0 yuv420p \
+        -filter:v:0 "$(build_video_filters)" \
         -movflags +faststart \
         -c:a aac \
         -b:a 192k \
@@ -992,6 +1005,17 @@ run_copy_clip() {
         duration_args=( -t "$clip_duration" )
     fi
 
+    thumbnail_map_args=()
+    thumbnail_codec_args=()
+    thumbnail_video_index=1
+    while IFS= read -r stream_index; do
+        if [ -n "$stream_index" ]; then
+            thumbnail_map_args+=( -map "0:$stream_index" )
+            thumbnail_codec_args+=( -c:v:"$thumbnail_video_index" copy -disposition:v:"$thumbnail_video_index" attached_pic )
+            thumbnail_video_index=$((thumbnail_video_index + 1))
+        fi
+    done < <(attached_thumbnail_indexes "$input")
+
     ffmpeg \
         -hide_banner \
         -loglevel error \
@@ -1002,9 +1026,11 @@ run_copy_clip() {
         "${duration_args[@]}" \
         -map 0:v:0 \
         -map 0:a? \
+        "${thumbnail_map_args[@]}" \
         -dn \
         -sn \
         -c copy \
+        "${thumbnail_codec_args[@]}" \
         -movflags +faststart \
         -f mp4 \
         "$tmp_output"
