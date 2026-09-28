@@ -156,6 +156,21 @@ sample_image="examples/lenna.png"
 sample_audio="examples/bah.wav"
 created_video="tmp/$(basename "${sample_audio%.*}").mp4"
 
+early_collision_dir="$tmp_dir/add-audio-early-collision"
+mkdir -p "$early_collision_dir"
+early_collision_audio="$early_collision_dir/existing.wav"
+early_collision_output="$early_collision_dir/existing.mp4"
+cp "$sample_audio" "$early_collision_audio"
+: > "$early_collision_output"
+
+if output=$("$target_script" --add-audio "$tmp_dir/missing-image.png" "$early_collision_audio" 2>&1); then
+    fail "add audio should reject inferred existing output before processing input"
+elif case "$output" in *"output file already exists: $early_collision_output"*) true ;; *) false ;; esac; then
+    pass "add audio should reject inferred existing output before processing input"
+else
+    fail "add audio should reject inferred existing output before processing input"
+fi
+
 if "$target_script" --force --add-audio "$sample_image" "$sample_audio" "$created_video" >/dev/null 2>&1 && [ -f "$created_video" ] && [ "$(basename "$created_video")" = "$(basename "${sample_audio%.*}").mp4" ]; then
     pass "image add-audio output should use audio filename"
 else

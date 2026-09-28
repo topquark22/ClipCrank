@@ -1544,6 +1544,20 @@ if ! have_command ffmpeg; then
     exit 127
 fi
 
+if [ "$add_audio" = true ]; then
+    output=${requested_output:-$(derive_video_output_path "$audio_input")}
+
+    if [ "$input" = "$output" ] || [ "$audio_input" = "$output" ]; then
+        error "input and output paths must be different"
+        exit 1
+    fi
+
+    if [ "$force" = false ] && [ -e "$output" ]; then
+        error "output file already exists: $output"
+        exit 1
+    fi
+fi
+
 if [ ! -e "$input" ]; then
     error "input file not found: $input"
     exit 1
@@ -2157,22 +2171,6 @@ if [ "$add_audio" = true ]; then
     if [ "$input_is_image" = true ] && [ "$preserve_metadata" = true ]; then
         error "--add-audio with a still image cannot be used with --preserve-metadata"
         exit 2
-    fi
-
-    if [ "$input_is_image" = true ]; then
-        output=${requested_output:-$(derive_video_output_path "$audio_input")}
-    else
-        output=${requested_output:-$(derive_video_output_path "$input")}
-    fi
-
-    if [ "$input" = "$output" ] || [ "$audio_input" = "$output" ]; then
-        error "input and output paths must be different"
-        exit 1
-    fi
-
-    if [ "$force" = false ] && [ -e "$output" ]; then
-        error "output file already exists: $output"
-        exit 1
     fi
 
     if ! have_aac_encoder; then
