@@ -49,7 +49,7 @@ usage() {
 Usage:
   $progname OPERATION [OPTIONS] INPUT [OUTPUT]
   $progname --add-audio [OPTIONS] VISUAL AUDIO [OUTPUT]
-  $progname --join [--reencode] [OPTIONS] INPUT INPUT... OUTPUT.mp4
+  $progname --join [--reencode] [OPTIONS] INPUT INPUT... OUTPUT
   $progname --add-thumbnail [OPTIONS] INPUT OUTPUT
 
 Video re-encoding and clipping:
@@ -90,7 +90,7 @@ Metadata and information:
   --clear-metadata           Remove input metadata
 
 Joining:
-  --join                     Join compatible videos; --reencode normalizes mixed inputs
+  --join                     Join compatible videos or audio; --reencode normalizes inputs
 
 Container:
   --remux                    Change container without re-encoding: INPUT OUTPUT
@@ -1399,17 +1399,20 @@ multi_frame_output_base() {
 # Compare decoding parameters, stream order, time bases and codec initialization
 # data, but not per-file durations, bit rates or metadata. Fail conservatively.
 join_signature() {
-    ffprobe -v error -show_data_hash sha256 \
+    local -a selection=()
+    [ -z "${2:-}" ] || selection=(-select_streams "$2")
+    ffprobe -v error -show_data_hash sha256 "${selection[@]}" \
         -show_entries 'stream=codec_type,codec_name,codec_tag_string,profile,level,width,height,pix_fmt,field_order,sample_aspect_ratio,r_frame_rate,avg_frame_rate,time_base,sample_fmt,sample_rate,channels,channel_layout,extradata_hash,color_range,color_space,color_transfer,color_primaries:stream_disposition=attached_pic' \
         -of compact "$1"
 }
 
-join_videos() {
+join_media() {
     local output source signature baseline='' work index=0 list encoder duration
-    local width height rate any_audio=false normalized
+    local width height rate any_audio=false normalized media_type= source_type extension selector
+    local -a final_args
     local -a inputs encoder_args
     if [ "${#positional_args[@]}" -lt 3 ]; then
-        error "--join requires at least two input videos and an output file"
+        error "--join requires at least two inputs and an output file"
         exit 2
     fi
     if [ "$add_audio" = true ] || [ "$extract_audio" = true ] ||
@@ -1431,7 +1434,6 @@ join_videos() {
         have_command "$source" || { error "$source is not installed or not on PATH"; exit 127; }
     done
     output=${positional_args[${#positional_args[@]}-1]}
-    case "$output" in *.mp4) ;; *) error "--join output must use .mp4"; exit 2 ;; esac
     inputs=( "${positional_args[@]:0:${#positional_args[@]}-1}" )
     [ "$force" = true ] || [ ! -e "$output" ] || {
         error "output file already exists: $output"; exit 1;
@@ -1443,26 +1445,56 @@ join_videos() {
         if [ "$source" = "$output" ] || { [ -e "$output" ] && [ "$source" -ef "$output" ]; }; then
             error "input and output paths must be different"; exit 1
         fi
-        has_video_stream "$source" || { error "input has no video: $source"; exit 1; }
+        if has_video_stream "$source"; then
+            source_type=video
+        elif has_audio_stream "$source"; then
+            source_type=audio
+        else
+            error "input has no playable audio or video: $source"; exit 1
+        fi
+        if [ -z "$media_type" ]; then media_type=$source_type;
+        elif [ "$media_type" != "$source_type" ]; then
+            error "--join cannot mix audio-only and video inputs"; exit 2
+        fi
+        if [ "$media_type" = audio ] && [ "$reencode" = false ] &&
+           [ "$(probe_value "$source" stream=codec_name a:0)" != mp3 ]; then
+            error "audio joining requires MP3 inputs; use --join --reencode"; exit 1
+        fi
         # Attached pictures and multiple video streams need an explicit selection
         # policy; normalized joining uses the first ordinary video stream.
         if [ "$reencode" = false ]; then
-            signature=$(join_signature "$source") || { error "cannot probe input: $source"; exit 1; }
+            selector=
+            [ "$media_type" != audio ] || selector=a:0
+            signature=$(join_signature "$source" "$selector") || { error "cannot probe input: $source"; exit 1; }
             if [ -z "$baseline" ]; then baseline=$signature;
             elif [ "$signature" != "$baseline" ]; then
-                error "incompatible videos: $source; use --join --reencode"
+                error "incompatible inputs: $source; use --join --reencode"
                 exit 1
             fi
         fi
         if has_audio_stream "$source"; then any_audio=true; fi
     done
+    if [ "$media_type" = audio ]; then
+        extension=mp3
+        if [ -n "$fps" ]; then error "audio-only joining does not support --fps"; exit 2; fi
+    else
+        extension=mp4
+    fi
+    case "$output" in
+        *."$extension") ;;
+        *) error "--join $media_type output must use .$extension"; exit 2 ;;
+    esac
     # Put work beside the destination for a same-filesystem final rename.
     work=$(mktemp -d "$(dirname -- "$output")/.clipcrank-join.XXXXXXXX")
     trap 'rm -rf -- "$work"' EXIT
     trap 'exit 1' INT TERM HUP
     list="$work/inputs.txt"
     : > "$list"
-    if [ "$reencode" = true ]; then
+    if [ "$media_type" = audio ] && [ "$reencode" = true ]; then
+        encoder=$(select_mp3_encoder) || { error "no supported MP3 encoder found"; exit 1; }
+        extension=wav
+    fi
+    if [ "$media_type" = video ] && [ "$reencode" = true ]; then
         encoder=$(select_video_encoder) || { error "no supported H.264 encoder found"; exit 1; }
         have_aac_encoder || { error "AAC encoder not found"; exit 1; }
         encoder_args=()
@@ -1473,8 +1505,19 @@ join_videos() {
         rate=${fps:-$(probe_value "${inputs[0]}" stream=r_frame_rate V:0)}
     fi
     for source in "${inputs[@]}"; do
-        normalized="$work/$index.mp4"
-        if [ "$reencode" = true ]; then
+        normalized="$work/$index.$extension"
+        if [ "$media_type" = audio ]; then
+            local -a audio_codec=(-c:a copy)
+            if [ "$reencode" = true ]; then
+                # Decode each input to common PCM, then encode the joined audio
+                # once, avoiding encoder padding at every segment boundary.
+                audio_codec=(-c:a pcm_s16le -ar 48000 -ac 2)
+            fi
+            ffmpeg -v error -nostdin -y -i "$source" -map 0:a:0 -vn \
+                "${audio_codec[@]}" -map_metadata -1 "$normalized" || {
+                error "audio join preparation failed: $source"; exit 1;
+            }
+        elif [ "$reencode" = true ]; then
             # Video duration governs audio padding/trimming, including silence.
             duration=$(probe_value "$source" stream=duration V:0)
             if [ -z "$duration" ] || [ "$duration" = N/A ]; then
@@ -1498,12 +1541,21 @@ join_videos() {
             ffmpeg -v error -nostdin -y -i "$source" -map 0 -c copy \
                 "$normalized" || { error "cannot copy input into MP4; use --join --reencode: $source"; exit 1; }
         fi
-        printf "file '%s.mp4'\n" "$index" >> "$list"
+        printf "file '%s.%s'\n" "$index" "$extension" >> "$list"
         index=$((index + 1))
     done
-    ffmpeg -v error -nostdin -y -f concat -safe 1 -i "$list" -map 0 -c copy \
-        -movflags +faststart "$work/output.mp4" || { error "joining failed"; exit 1; }
-    mv -f -- "$work/output.mp4" "$output"
+    if [ "$media_type" = audio ]; then
+        extension=mp3
+        final_args=(-map 0:a:0 -c:a copy -map_metadata -1)
+        if [ "$reencode" = true ]; then
+            final_args=(-map 0:a:0 -c:a "$encoder" -b:a 192k -map_metadata -1)
+        fi
+    else
+        final_args=(-map 0 -c copy -movflags +faststart)
+    fi
+    ffmpeg -v error -nostdin -y -f concat -safe 1 -i "$list" "${final_args[@]}" \
+        "$work/output.$extension" || { error "joining failed"; exit 1; }
+    mv -f -- "$work/output.$extension" "$output"
     rm -rf -- "$work"
     trap - EXIT INT TERM HUP
     printf 'created: %s\n' "$output"
@@ -1561,7 +1613,7 @@ if [ "$copy_stream" = true ] && [ "$operation_count" -ne 0 ]; then
 fi
 
 if [ "$join" = true ]; then
-    join_videos
+    join_media
     exit 0
 fi
 

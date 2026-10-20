@@ -82,7 +82,7 @@ An operation must be selected explicitly, except that `--start` or `--end` may d
 
 The available operations currently are:
 
-- `--join` — join compatible videos, or normalize all inputs with `--reencode`
+- `--join` — join compatible videos or audio, or normalize all inputs with `--reencode`
 - `--reencode` — recode video as standardized H.264/AAC MP4
 - `--add-audio` — add or replace audio using a video or still image as input
 - `--extract-audio` — extract the first audio stream as MP3
@@ -95,7 +95,7 @@ The available operations currently are:
 
 Only one operation may be selected at a time.
 
-### Joining videos
+### Joining videos and audio
 
 ```sh
 ./clipcrank --join first.mp4 second.mp4 joined.mp4
@@ -119,6 +119,23 @@ receive silence; if all inputs lack audio, output has no audio track.
 Subtitles, additional streams, thumbnails, and input metadata are omitted in
 this mode. Joining cannot be combined with clipping, other operations, or
 metadata options. Existing output requires `--force`; inputs cannot be overwritten.
+
+For audio-only inputs, use an explicit `.mp3` output:
+
+```sh
+./clipcrank --join first.mp3 second.mp3 joined.mp3
+./clipcrank --join --reencode first.mp3 second.mp3 joined.mp3
+```
+
+Compatible MP3 audio is copied without re-encoding, including any existing
+encoder padding in its frames. Different sample rates,
+channel layouts, or other decoding parameters require `--reencode`. Audio
+re-encoding accepts any audio-only input supported by FFmpeg, normalizes it to
+stereo 48 kHz, then encodes the combined audio to MP3 at 192 kb/s. Encoding once
+after joining avoids adding encoder padding between segments. Only the first
+audio stream is joined; embedded cover art and input metadata are omitted.
+Cover art does not cause an MP3 to be classified as video. Audio-only inputs
+cannot be mixed with videos, and `--fps` is unavailable for audio joining.
 
 ### Re-encoding
 
@@ -381,6 +398,7 @@ The repository includes `docs/TEST_PLAN.md` and `test/smoke-test.sh`.
 chmod +x test/smoke-test.sh
 ./test/smoke-test.sh
 bash test/join-test.sh
+bash test/join-audio-test.sh
 ```
 
 ## Exit Behavior
