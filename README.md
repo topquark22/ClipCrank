@@ -82,6 +82,7 @@ An operation must be selected explicitly, except that `--start` or `--end` may d
 
 The available operations currently are:
 
+- `--join` — join compatible videos, or normalize all inputs with `--reencode`
 - `--reencode` — recode video as standardized H.264/AAC MP4
 - `--add-audio` — add or replace audio using a video or still image as input
 - `--extract-audio` — extract the first audio stream as MP3
@@ -93,6 +94,31 @@ The available operations currently are:
 - `--frame TIME` — capture one or more JPEG frames
 
 Only one operation may be selected at a time.
+
+### Joining videos
+
+```sh
+./clipcrank --join first.mp4 second.mp4 joined.mp4
+./clipcrank --join --reencode first.mov second.webm joined.mp4
+```
+
+Supply at least two input videos followed by an explicit `.mp4` output.
+Inputs are joined in argument order. Without `--reencode`, ClipCrank checks
+stream order, codecs, codec initialization data, dimensions, pixel formats,
+frame rates, time bases, and audio parameters before copying streams. Incompatible
+inputs fail with a message requiring `--reencode`; matching codec names alone
+are insufficient. Compatible streams must also be supported by MP4.
+
+With `--join --reencode`, every input is encoded to H.264 with AAC audio.
+The first ordinary video stream and first audio stream are selected from each
+input. Output uses the first video's dimensions (rounded down to even numbers)
+and frame rate; `--fps N` overrides the rate. Videos are scaled to fit with
+padding and square pixels. Audio is normalized to stereo 48 kHz and padded or
+trimmed to each video's duration. When some inputs lack audio, those segments
+receive silence; if all inputs lack audio, output has no audio track.
+Subtitles, additional streams, thumbnails, and input metadata are omitted in
+this mode. Joining cannot be combined with clipping, other operations, or
+metadata options. Existing output requires `--force`; inputs cannot be overwritten.
 
 ### Re-encoding
 
@@ -354,6 +380,7 @@ The repository includes `docs/TEST_PLAN.md` and `test/smoke-test.sh`.
 ```sh
 chmod +x test/smoke-test.sh
 ./test/smoke-test.sh
+bash test/join-test.sh
 ```
 
 ## Exit Behavior
