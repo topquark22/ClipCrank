@@ -16,7 +16,7 @@
 - Creates H.264/AAC MP4 video from a still image plus audio
 - Extracts audio from video to MP3
 - Removes audio from video
-- Adds or replaces an embedded video thumbnail
+- Adds or replaces an embedded video thumbnail or MP3 cover art
 - Remuxes media to a different container without re-encoding
 - Displays technical media information
 
@@ -188,7 +188,21 @@ The output filename is mandatory. No default output filename is generated.
 
 ### Adding or replacing a thumbnail
 
-Use `--add-thumbnail` to add an embedded thumbnail to an MP4 video. Both input and output filenames are mandatory.
+Use `--add-thumbnail` to add an embedded thumbnail to an MP4 video or cover art to an MP3. Both input and output filenames are mandatory.
+
+For audio-only MP3 input, supply a still image with `--image` and an explicit
+MP3 output filename:
+
+```sh
+./clipcrank --add-thumbnail --image cover.jpg song.mp3 song-with-cover.mp3
+./clipcrank --add-thumbnail --replace --image cover.png song.mp3 song-with-cover.mp3
+```
+
+The audio is copied without re-encoding and existing song metadata is retained.
+The image is converted to JPEG and embedded as front cover art in an ID3v2.3
+tag. `--replace` replaces existing cover art; without it, an MP3 that already
+has cover art is rejected. `--force` separately permits overwriting an existing
+output file. Audio-only input requires `--image` and does not support `--frame`.
 
 With no thumbnail selector, ClipCrank uses the first frame of the video:
 
@@ -399,6 +413,7 @@ chmod +x test/smoke-test.sh
 ./test/smoke-test.sh
 bash test/join-test.sh
 bash test/join-audio-test.sh
+bash test/mp3-thumbnail-test.sh
 ```
 
 ## Exit Behavior

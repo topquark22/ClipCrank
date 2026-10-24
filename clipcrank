@@ -66,7 +66,7 @@ Audio:
   --remove-audio             Remove audio: INPUT OUTPUT
 
 Thumbnail:
-  --add-thumbnail            Add an attached thumbnail: INPUT OUTPUT
+  --add-thumbnail            Add video thumbnail or MP3 cover art: INPUT OUTPUT
   --frame TIME               Select thumbnail frame with --add-thumbnail
   --image IMAGE              Use supplied image with --add-thumbnail
   --replace                  Replace existing thumbnail with --add-thumbnail
@@ -1354,6 +1354,19 @@ run_add_thumbnail() {
     tmp_output=$3
     replace_existing=$4
 
+    case "$tmp_output" in
+        *.mp3)
+            ffmpeg -hide_banner -loglevel error -y \
+                -i "$input" -i "$thumbnail" \
+                -map 0:a:0 -map 1:v:0 -map_metadata 0 \
+                -c:a copy -c:v copy -disposition:v:0 attached_pic \
+                -metadata:s:v:0 title="Album cover" \
+                -metadata:s:v:0 comment="Cover (front)" \
+                -id3v2_version 3 -f mp3 "$tmp_output"
+            return $?
+            ;;
+    esac
+
     map_args=( -map 0 )
     if [ "$replace_existing" = true ]; then
         while IFS= read -r stream_index; do
@@ -2059,15 +2072,31 @@ if [ "$add_thumbnail" = true ]; then
 
     output=$requested_output
 
+    if ! have_command ffprobe; then
+        error "ffprobe is not installed or not on PATH"
+        exit 127
+    fi
+    thumbnail_extension=mp4
+    if ! has_video_stream "$input" && has_audio_stream "$input"; then
+        if [ "$(probe_value "$input" stream=codec_name a:0)" != mp3 ]; then
+            error "audio-only thumbnails require MP3 input"
+            exit 2
+        fi
+        thumbnail_extension=mp3
+        if [ -z "$thumbnail_image" ] || [ -n "$frame_time" ]; then
+            error "MP3 thumbnails require --image; --frame is unavailable for audio-only input"
+            exit 2
+        fi
+    fi
     case "$output" in
-        *.mp4) ;;
+        *."$thumbnail_extension") ;;
         *)
-            error "thumbnail output must use .mp4"
+            error "thumbnail output must use .$thumbnail_extension"
             exit 2
             ;;
     esac
 
-    if [ "$input" = "$output" ]; then
+    if [ "$input" = "$output" ] || { [ -e "$output" ] && [ "$input" -ef "$output" ]; }; then
         error "input and output paths must be different"
         exit 1
     fi
@@ -2077,10 +2106,6 @@ if [ "$add_thumbnail" = true ]; then
         exit 1
     fi
 
-    if ! have_command ffprobe; then
-        error "ffprobe is not installed or not on PATH"
-        exit 127
-    fi
 
     if has_attached_thumbnail "$input" && [ "$replace_thumbnail" = false ]; then
         error "input already contains an attached thumbnail; use --replace to replace it"
@@ -2126,8 +2151,9 @@ if [ "$add_thumbnail" = true ]; then
         fi
     fi
 
-    tmp_output="${output%.mp4}.part.mp4"
-    tmp_thumbnail="${output%.mp4}.thumbnail.part.jpg"
+    thumbnail_base=${output%.*}
+    tmp_output="$thumbnail_base.part.$thumbnail_extension"
+    tmp_thumbnail="$thumbnail_base.thumbnail.part.jpg"
 
     cleanup() {
         [ ! -e "$tmp_output" ] || rm -f "$tmp_output"
