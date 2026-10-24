@@ -88,7 +88,7 @@ The available operations currently are:
 - `--extract-audio` — extract the first audio stream as MP3
 - `--remove-audio` — remove the audio stream and create H.264 MP4 output
 - `--remux` — change the media container without re-encoding streams
-- `--add-thumbnail` — add or replace an embedded thumbnail on MP4 video output
+- `--add-thumbnail` — add or replace an MP4 video thumbnail or MP3 cover art
 - `--info` — display technical media information and exit
 - `--show-metadata` — display metadata and exit
 - `--frame TIME` — capture one or more JPEG frames

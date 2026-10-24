@@ -51,6 +51,7 @@ Usage:
   $progname --add-audio [OPTIONS] VISUAL AUDIO [OUTPUT]
   $progname --join [--reencode] [OPTIONS] INPUT INPUT... OUTPUT
   $progname --add-thumbnail [OPTIONS] INPUT OUTPUT
+  $progname --add-thumbnail --image IMAGE [--replace] INPUT.mp3 OUTPUT.mp3
 
 Video re-encoding and clipping:
   --reencode                 Re-encode video to H.264/AAC MP4 or audio-only input to MP3
@@ -68,8 +69,11 @@ Audio:
 Thumbnail:
   --add-thumbnail            Add video thumbnail or MP3 cover art: INPUT OUTPUT
   --frame TIME               Select thumbnail frame with --add-thumbnail
-  --image IMAGE              Use supplied image with --add-thumbnail
-  --replace                  Replace existing thumbnail with --add-thumbnail
+  --image IMAGE              Use supplied image with --add-thumbnail (required for MP3)
+  --replace                  Replace existing thumbnail or MP3 cover art
+
+  Thumbnail output is required: .mp4 for video, .mp3 for MP3 input.
+  MP3 audio is copied without re-encoding; --frame is unavailable for MP3.
 
 Frame capture:
   --frame TIME               Capture a JPEG frame
@@ -115,6 +119,8 @@ Examples:
   $progname --add-thumbnail input.mp4 output.mp4
   $progname --add-thumbnail --frame 12.5 input.mp4 output.mp4
   $progname --add-thumbnail --image cover.jpg input.mp4 output.mp4
+  $progname --add-thumbnail --image cover.png input.mp3 output.mp3
+  $progname --add-thumbnail --replace --image "cover image.png" input.mp3 output.mp3
   $progname --remux input.mkv output.mp4
   $progname --info input.mov
 EOF
