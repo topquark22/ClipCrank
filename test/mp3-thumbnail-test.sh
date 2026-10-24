@@ -21,6 +21,12 @@ ffmpeg -v error -f lavfi -i color=red:s=32x32 -frames:v 1 "$work/red.jpg"
 ./clipcrank --add-thumbnail --replace --image "$work/red.jpg" "$work/covered.mp3" "$work/replaced.mp3"
 [ "$(ffprobe -v error -select_streams v -show_entries stream=index -of csv=p=0 "$work/replaced.mp3" | wc -l)" -eq 1 ] || fail 'multiple covers'
 [ "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 "$work/replaced.mp3")" = '32,32' ] || fail 'cover not replaced'
+reject --add-thumbnail --image examples/lenna.png "$work/plain.mp3"
+rg -q 'explicit output file' "$work/error" || fail 'missing explicit output guidance'
+reject --add-thumbnail --image examples/lenna.png "$work/plain.mp3" ''
+rg -q 'explicit output file' "$work/error" || fail 'empty output accepted'
+./clipcrank --add-thumbnail --replace --image examples/lenna.png examples/with_image.mp3 "$work/fixture-cover.mp3"
+[ "$(ffprobe -v error -show_entries format=format_name -of csv=p=0 "$work/fixture-cover.mp3")" = mp3 ] || fail 'MP3 cover fixture misclassified'
 reject --add-thumbnail "$work/plain.mp3" "$work/no-image.mp3"
 rg -q 'require --image' "$work/error" || fail 'missing image guidance'
 reject --add-thumbnail --frame 0 "$work/plain.mp3" "$work/frame.mp3"

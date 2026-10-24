@@ -1635,7 +1635,13 @@ if [ "$add_audio" = true ]; then
         usage >&2
         exit 2
     fi
-elif [ "$remove_audio" = true ] || [ "$remux" = true ] || [ "$add_thumbnail" = true ]; then
+elif [ "$add_thumbnail" = true ]; then
+    if [ "${#positional_args[@]}" -ne 2 ] || [ -z "${positional_args[1]:-}" ]; then
+        error "--add-thumbnail requires an input file and an explicit output file"
+        usage >&2
+        exit 2
+    fi
+elif [ "$remove_audio" = true ] || [ "$remux" = true ]; then
     if [ "${#positional_args[@]}" -ne 2 ]; then
         usage >&2
         exit 2
@@ -2077,7 +2083,10 @@ if [ "$add_thumbnail" = true ]; then
         exit 127
     fi
     thumbnail_extension=mp4
-    if ! has_video_stream "$input" && has_audio_stream "$input"; then
+    # MP3 cover art can be exposed as a video stream. The container identifies
+    # MP3 input independently of ffprobe's stream/disposition presentation.
+    thumbnail_input_format=$(probe_value "$input" format=format_name)
+    if [ "$thumbnail_input_format" = mp3 ] || { ! has_video_stream "$input" && has_audio_stream "$input"; }; then
         if [ "$(probe_value "$input" stream=codec_name a:0)" != mp3 ]; then
             error "audio-only thumbnails require MP3 input"
             exit 2
